@@ -2,6 +2,7 @@
 Supporting functions and runtime for the game corewars
 
 ## License
+#### MIT
 Copyright © 2017 Will Johnston
 
 Permission is hereby granted, free of charge, to any person obtaining
