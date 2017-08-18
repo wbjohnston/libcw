@@ -4,8 +4,8 @@
 
 use std::collections::VecDeque;
 
-mod isa;
-pub use isa::{OpCode, Instruction};
+mod redcode;
+pub use redcode::{OpCode, Instruction};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SimulatorError
