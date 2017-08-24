@@ -31,10 +31,10 @@ pub enum OpCode
     /// Jump instruction
     Jmp,
 
-    /// TODO
+    /// Jump if zero
     Jmz,
 
-    /// TODO
+    /// Jump if not zero
     Jmn,
     
     /// TODO
@@ -65,9 +65,69 @@ pub enum OpCode
     Nop
 }
 
+/// TODO: docs
+#[derive(Debug, Copy, Clone)]
+pub enum OpCodeMode
+{
+    A,
+    B,
+    AB,
+    BA,
+    X,
+    I,
+    F
+}
+
+/// TODO: docs
+#[derive(Debug, Copy, Clone)]
+pub enum AddressingMode
+{
+    /// TODO
+    Direct,
+
+    /// TODO
+    AIndirect,
+
+    /// TODO
+    BIndirect,
+
+    /// TODO
+    AIndirectPreDecrement,
+
+    /// TODO
+    BIndirectPreDecrement,
+
+    /// TODO
+    AIndirectPostIncrement,
+
+    /// TODO
+    BIndirectPostIncrement,
+}
+
+/// TODO: docs
+#[derive(Debug, Copy, Clone)]
+pub struct OpCodeField
+{
+    pub opcode: OpCode,
+    pub mode: OpCodeMode
+}
+
+/// TODO: docs
+#[derive(Debug, Copy, Clone)]
+pub struct InstructionField
+{
+    pub offset: isize,
+    pub addressing_mode: AddressingMode,
+}
+
 /// Recode instruction
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Instruction; // TODO
+#[derive(Debug, Copy, Clone)]
+pub struct Instruction
+{
+    pub op: OpCodeField,
+    pub a: InstructionField,
+    pub b: InstructionField
+}
 
 
 

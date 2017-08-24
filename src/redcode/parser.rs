@@ -45,7 +45,7 @@ impl<'a> Lexer<'a>
 }
 
 /// Redcode parser
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 struct Parser<'a>
 {
     input: &'a [Token<'a>],

@@ -1,5 +1,8 @@
 
 use super::redcode::Instruction;
+use super::redcode::InstructionField;
+use super::redcode::OpCodeMode;
+use super::redcode::OpCode;
 
 use std::collections::VecDeque;
 
@@ -29,7 +32,7 @@ pub enum SimulatorEvent
 /// # Components
 /// 1. shared memory: TODO
 /// 2. process queue: TODO
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Simulator
 {
     /// Simulator memory
@@ -82,28 +85,46 @@ impl Simulator
     /// Step the simulator one instruction
     pub fn step(&mut self) -> Result<SimulatorEvent, SimulatorError>
     {
-        
         // decode phase
-        // TODO
+        // TODO: actual decode phase
+        let pc = 0;
         
         // fetch phase
-        // TODO
+        let i = self.memory[pc];
+
+        // TODO: predecrement
 
         // execution phase
-        // TODO
+        let (mode, a, b) = (i.op.mode, i.a, i.b); 
+        let exec_event = match i.op.opcode {
+            OpCode::Dat => self.exec_nop(mode, a, b),
+            OpCode::Mov => self.exec_mov(mode, a, b),
+            OpCode::Add => self.exec_add(mode, a, b),
+            OpCode::Sub => self.exec_sub(mode, a, b),
+            OpCode::Mul => self.exec_mul(mode, a, b),
+            OpCode::Div => self.exec_div(mode, a, b),
+            OpCode::Mod => self.exec_mod(mode, a, b),
+            OpCode::Jmp => self.exec_jmp(mode, a, b),
+            OpCode::Jmz => self.exec_jmz(mode, a, b),
+            OpCode::Jmn => self.exec_jmn(mode, a, b),
+            OpCode::Djn => self.exec_djn(mode, a, b),
+            OpCode::Spl => self.exec_spl(mode, a, b),
+            OpCode::Cmp => self.exec_cmp(mode, a, b),
+            OpCode::Seq => self.exec_seq(mode, a, b),
+            OpCode::Sne => self.exec_sne(mode, a, b),
+            OpCode::Slt => self.exec_slt(mode, a, b),
+            OpCode::Ldp => self.exec_ldp(mode, a, b),
+            OpCode::Stp => self.exec_stp(mode, a, b),
+            OpCode::Nop => self.exec_nop(mode, a, b),
+        }?;
 
-        unimplemented!();
+        // TOOD: post increment
+        Ok(exec_event)
     }
+
 
     /// Reset simulator to original state, dumping all currently loaded programs
     pub fn reset(&mut self)
-    {
-        unimplemented!();
-    }
-
-    /// Step the simulator n times
-    pub fn step_n(&mut self, n_steps: usize) 
-        -> Result<Vec<SimulatorEvent>, SimulatorError>
     {
         unimplemented!();
     }
@@ -114,16 +135,227 @@ impl Simulator
         let mut pids = vec![]; // order programs finish in
 
         loop {
-            match self.step()
+            match self.step()?
             {
-                Ok(SimulatorEvent::Finished) => break,
-                Ok(SimulatorEvent::Terminated(pid)) => pids.push(pid),
-                Err(e) => panic!(e),
-                _ => { /* do nothing */ },
+                SimulatorEvent::Finished        => break,
+                SimulatorEvent::Terminated(pid) => pids.push(pid),
+                SimulatorEvent::None            => {},
             };
         }
 
         Ok(pids)
+    }
+
+    /////////////
+    // Instruction Execution functions
+    /////////////
+    /// Execute `dat` instruction
+    fn exec_dat(&mut self,
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `mov` instruction
+    fn exec_mov(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `add` instruction
+    fn exec_add(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `sub` instruction
+    fn exec_sub(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `mul` instruction
+    fn exec_mul(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `div` instruction
+    fn exec_div(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `mod` instruction
+    fn exec_mod(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `jmp` instruction
+    fn exec_jmp(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `jmz` instruction
+    fn exec_jmz(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `jmn` instruction
+    fn exec_jmn(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `djn` instruction
+    fn exec_djn(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `spl` instruction
+    fn exec_spl(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `cmp` instruction
+    fn exec_cmp(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `seq` instruction
+    fn exec_seq(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `sne` instruction
+    fn exec_sne(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `slt` instruction
+    fn exec_slt(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `ldp` instruction
+    fn exec_ldp(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `stp` instruction
+    fn exec_stp(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
+    }
+
+    /// Execute `nop` instruction
+    fn exec_nop(&mut self, 
+                mode: OpCodeMode,
+                a: InstructionField,
+                b: InstructionField
+                )
+        -> Result<SimulatorEvent, SimulatorError>
+    {
+        unimplemented!();
     }
 
     /////////////
