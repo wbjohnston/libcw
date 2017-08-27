@@ -3,7 +3,6 @@
 /// Operations that a redcode processor can perform
 ///
 /// TODO: longform explanation
-#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OpCode
 {
@@ -67,7 +66,7 @@ pub enum OpCode
 
 /// TODO: docs
 #[derive(Debug, Copy, Clone)]
-pub enum OpCodeMode
+pub enum OpMode
 {
     A,
     B,
@@ -109,14 +108,14 @@ pub enum AddressingMode
 pub struct OpCodeField
 {
     pub opcode: OpCode,
-    pub mode: OpCodeMode
+    pub mode:   OpMode
 }
 
 /// TODO: docs
 #[derive(Debug, Copy, Clone)]
 pub struct InstructionField
 {
-    pub offset: isize,
+    pub offset:          isize,
     pub addressing_mode: AddressingMode,
 }
 
@@ -125,8 +124,8 @@ pub struct InstructionField
 pub struct Instruction
 {
     pub op: OpCodeField,
-    pub a: InstructionField,
-    pub b: InstructionField
+    pub a:  InstructionField,
+    pub b:  InstructionField
 }
 
 
