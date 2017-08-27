@@ -5,3 +5,4 @@
 pub mod redcode;
 
 pub mod simulator;
+

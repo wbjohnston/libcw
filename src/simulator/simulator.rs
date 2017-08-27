@@ -1,10 +1,18 @@
+//! Redcode simulator
+
+use std::collections::VecDeque;
 
 use redcode::*;
 use simulator::{SimulatorError, SimulatorEvent};
 
-use std::collections::VecDeque;
-
 pub type SimulatorResult = Result<SimulatorEvent, SimulatorError>;
+
+/// Insruction that a core is loaded with by default
+pub const DEFAULT_INSTRUCTION: Instruction = Instruction {
+    op: OpField { mode: OpMode::I, op: OpCode::Dat },
+    a:  Field   { mode: AddressingMode::Direct, offset: 0 },
+    b:  Field   { mode: AddressingMode::Direct, offset: 0 },
+};
 
 /// Core wars Simulator
 ///
@@ -15,22 +23,27 @@ pub type SimulatorResult = Result<SimulatorEvent, SimulatorError>;
 pub struct Simulator
 {
     /// Simulator memory
-    memory:             Vec<Instruction>,
-
-    /// Process count
-    pcount:             usize,
+    memory:        Vec<Instruction>,
 
     /// Current process id being run
-    curr_pid:           usize,
+    active_pid:    usize,
 
     /// Program counter for each process currently loaded into memory
-    // TODO: implement as VecDeque<(usize, VecDeque<usize>)>
-    // so that I can rely soely on VecDeque primitives
-    process_queue:      Vec<VecDeque<usize>>
+    process_queue: VecDeque<(usize, VecDeque<usize>)>
 }
 
 impl Simulator
 {
+    /// Create a new simulator
+    pub fn new(msize: usize) -> Self
+    {
+        Simulator {
+            memory: vec![DEFAULT_INSTRUCTION; msize], 
+            active_pid: 0,
+            process_queue: VecDeque::new()
+        }
+    }
+
     ////////////
     // Mutators
     ////////////
@@ -40,13 +53,13 @@ impl Simulator
     /// * `program`: program to load into memory
     /// * `offset`: offset in memory the program will be loaded into
     pub fn load(&mut self, program: &Vec<Instruction>, offset: usize)
-        -> Result<usize, SimulatorError>
+        -> Result<(), SimulatorError>
     {
         let msize = self.memory.len();
 
         if program.len() > msize {
             // program will overwrite itself if its loaded into memory
-            Err(SimulatorError::NotEnoughMemory)        
+            Err(SimulatorError::NotEnoughMemory)
         } else { // copy program into memory
             for i in 0..program.len() {
                 // programs wrap
@@ -55,288 +68,350 @@ impl Simulator
 
             // add to process queue
             let mut new_q = VecDeque::new();
-            new_q.push_front(offset);
-            self.process_queue.push(new_q);
+            let new_pid = self.process_queue.len() + 1;
 
-            self.pcount += 1;
-            Ok(0)
+            new_q.push_front(offset);
+            self.process_queue.push_front((new_pid, new_q));
+
+            Ok(()) 
         }
     }
 
     /// Step the simulator one instruction
     pub fn step(&mut self) -> SimulatorResult
     {
-        // decode phase
-        // TODO: actual decode phase
-        let pc = 0;
-        
-        // fetch phase
-        let i = self.memory[pc];
+        // TODO: this is written pretty badly
 
-        // TODO: predecrement
+        // get active process counter
+        // TODO: better error handling
+        if let Some((pid, mut q)) = self.process_queue.pop_back() {
+            self.active_pid = pid;
+            let pc = q.pop_back().unwrap(); 
 
-        // execution phase
-        let (mode, a, b) = (i.op.mode, i.a, i.b); 
-        let exec_event = match i.op.opcode {
-            OpCode::Dat => self.exec_nop(mode, a, b),
-            OpCode::Mov => self.exec_mov(mode, a, b),
-            OpCode::Add => self.exec_add(mode, a, b),
-            OpCode::Sub => self.exec_sub(mode, a, b),
-            OpCode::Mul => self.exec_mul(mode, a, b),
-            OpCode::Div => self.exec_div(mode, a, b),
-            OpCode::Mod => self.exec_mod(mode, a, b),
-            OpCode::Jmp => self.exec_jmp(mode, a, b),
-            OpCode::Jmz => self.exec_jmz(mode, a, b),
-            OpCode::Jmn => self.exec_jmn(mode, a, b),
-            OpCode::Djn => self.exec_djn(mode, a, b),
-            OpCode::Spl => self.exec_spl(mode, a, b),
-            OpCode::Cmp => self.exec_cmp(mode, a, b),
-            OpCode::Seq => self.exec_seq(mode, a, b),
-            OpCode::Sne => self.exec_sne(mode, a, b),
-            OpCode::Slt => self.exec_slt(mode, a, b),
-            OpCode::Ldp => self.exec_ldp(mode, a, b),
-            OpCode::Stp => self.exec_stp(mode, a, b),
-            OpCode::Nop => self.exec_nop(mode, a, b),
-        }?;
+            // fetch phase
+            let i = self.memory[pc];
 
-        // TOOD: post increment
-        Ok(exec_event)
+            // match i.a.mode {
+            //     AddressingMode::AIndirectPreDecrement => {
+            //         self.memory[pc + i.a.offset].a.offset -= 1;
+            //     },
+            //     AddressingMode::BIndirectPreDecrement => {
+            //         self.memory[pc + i.a.offset].b.offset -= 1;
+            //     },
+            //     _ => {}
+            // };
+
+            // match i.b.mode {
+            //     AddressingMode::AIndirectPreDecrement => {
+            //         self.memory[pc + i.b.offset].a.offset -= 1;
+            //     },
+            //     AddressingMode::BIndirectPreDecrement => {
+            //         self.memory[pc + i.b.offset].b.offset -= 1;
+            //     },
+            //     _ => {}
+            // };
+
+            // execution phase
+            let (mode, a, b) = (i.op.mode, i.a, i.b); 
+            let exec_event = match i.op.op {
+                OpCode::Dat => self.exec_dat(),
+                OpCode::Mov => self.exec_mov(mode, a, b),
+                OpCode::Add => self.exec_add(mode, a, b),
+                OpCode::Sub => self.exec_sub(mode, a, b),
+                OpCode::Mul => self.exec_mul(mode, a, b),
+                OpCode::Div => self.exec_div(mode, a, b),
+                OpCode::Mod => self.exec_mod(mode, a, b),
+                OpCode::Jmp => self.exec_jmp(mode, a, b),
+                OpCode::Jmz => self.exec_jmz(mode, a, b),
+                OpCode::Jmn => self.exec_jmn(mode, a, b),
+                OpCode::Djn => self.exec_djn(mode, a, b),
+                OpCode::Spl => self.exec_spl(mode, a, b),
+                OpCode::Cmp => self.exec_cmp(mode, a, b),
+                OpCode::Seq => self.exec_seq(mode, a, b),
+                OpCode::Sne => self.exec_sne(mode, a, b),
+                OpCode::Slt => self.exec_slt(mode, a, b),
+                OpCode::Ldp => self.exec_ldp(mode, a, b),
+                OpCode::Stp => self.exec_stp(mode, a, b),
+                OpCode::Nop => self.exec_nop(),
+            }?;
+
+            // requeue process queue
+            self.process_queue.push_front((pid, q));
+
+            // TODO: post increment
+            Ok(exec_event)
+        } else {
+            Ok(SimulatorEvent::Finished)
+        }
     }
-
 
     /// Reset simulator to original state, dumping all currently loaded programs
     pub fn reset(&mut self)
     {
-        unimplemented!();
+        let msize = self.memory.len();
+
+        self.memory = vec![DEFAULT_INSTRUCTION; msize];
+        self.process_queue = VecDeque::new();
     }
 
     /// Completely simulate 
-    pub fn complete(&mut self) -> Result<Vec<usize>, SimulatorError>
+    pub fn complete(&mut self) -> Result<Vec<SimulatorEvent>, SimulatorError>
     {
-        let mut pids = vec![]; // order programs finish in
+        let mut events = vec![]; // order programs finish in
 
         loop {
-            match self.step()?
-            {
-                SimulatorEvent::Finished        => break,
-                SimulatorEvent::Terminated(pid) => pids.push(pid),
-                SimulatorEvent::None            => {},
-            };
+            let e = self.step()?;
+            events.push(e);
+
+            if e == SimulatorEvent::Finished {
+                break;
+            }
         }
 
-        Ok(pids)
+        Ok(events)
     }
 
     /////////////
     // Instruction Execution functions
     /////////////
     /// Execute `dat` instruction
-    fn exec_dat(&mut self,
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
-        -> SimulatorResult
+    fn exec_dat(&mut self) -> SimulatorResult
     {
-        unimplemented!();
+        Ok(SimulatorEvent::Terminated(self.active_pid()))
     }
 
     /// Execute `mov` instruction
+    #[allow(unused_variables)]
     fn exec_mov(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
+        match mode {
+            OpMode::A => {
+                // TODO
+            },
+            OpMode::B => {
+                // TODO
+            },
+            OpMode::AB => {
+                // TODO
+            },
+            OpMode::BA => {
+                // TODO
+            },
+            OpMode::X => {
+                // TODO
+            },
+            OpMode::F => {
+                // TODO
+            },
+            OpMode::I => {
+                // TODO
+            },
+        };
+
         unimplemented!();
     }
 
     /// Execute `add` instruction
+    #[allow(unused_variables)]
     fn exec_add(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `sub` instruction
+    #[allow(unused_variables)]
     fn exec_sub(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `mul` instruction
+    #[allow(unused_variables)]
     fn exec_mul(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `div` instruction
+    #[allow(unused_variables)]
     fn exec_div(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `mod` instruction
+    #[allow(unused_variables)]
     fn exec_mod(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `jmp` instruction
+    #[allow(unused_variables)]
     fn exec_jmp(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `jmz` instruction
+    #[allow(unused_variables)]
     fn exec_jmz(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `jmn` instruction
+    #[allow(unused_variables)]
     fn exec_jmn(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `djn` instruction
+    #[allow(unused_variables)]
     fn exec_djn(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `spl` instruction
+    #[allow(unused_variables)]
     fn exec_spl(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `cmp` instruction
+    #[allow(unused_variables)]
     fn exec_cmp(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `seq` instruction
+    #[allow(unused_variables)]
     fn exec_seq(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `sne` instruction
+    #[allow(unused_variables)]
     fn exec_sne(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `slt` instruction
+    #[allow(unused_variables)]
     fn exec_slt(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `ldp` instruction
+    #[allow(unused_variables)]
     fn exec_ldp(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `stp` instruction
+    #[allow(unused_variables)]
     fn exec_stp(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
+        mode: OpMode,
+        a: Field,
+        b: Field
+        )
         -> SimulatorResult
     {
         unimplemented!();
     }
 
     /// Execute `nop` instruction
-    fn exec_nop(&mut self, 
-                mode: OpMode,
-                a: InstructionField,
-                b: InstructionField
-                )
-        -> SimulatorResult
+    fn exec_nop(&mut self) -> SimulatorResult
     {
-        unimplemented!();
+        Ok(SimulatorEvent::None)
     }
 
     /////////////
@@ -351,15 +426,16 @@ impl Simulator
 
     /// Get the current process id being run
     #[inline]
-    pub fn current_pid(&self) -> usize
+    pub fn active_pid(&self) -> usize
     {
-        self.curr_pid
+        self.active_pid
     }
 
     /// The number of programs currently loaded into memory
     #[inline]
     pub fn pcount(&self) -> usize
     {
-        self.pcount
+        self.process_queue.len()
     }
 }
+

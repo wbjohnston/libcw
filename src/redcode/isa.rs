@@ -64,21 +64,39 @@ pub enum OpCode
     Nop
 }
 
-/// TODO: docs
-#[derive(Debug, Copy, Clone)]
+/// Controls modes for what components of an instruction and OPCODE will 
+/// operate on
+///
+/// TODO: examples
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OpMode
 {
+    /// A-field to A-field
     A,
+
+    /// B-field to B-field
     B,
+
+    /// A field to B field
     AB,
+
+    /// B-field to A-field
     BA,
+
+    /// A-field to B-field AND B-field to A-field
     X,
+
+    /// A-field to A-field AND B-field to B-field
+    F,
+
+    /// Whole instruction
     I,
-    F
 }
 
-/// TODO: docs
-#[derive(Debug, Copy, Clone)]
+/// Field Addressing mode: controls how the `offset` behaves
+///
+/// TODO: examples
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddressingMode
 {
     /// TODO
@@ -103,30 +121,28 @@ pub enum AddressingMode
     BIndirectPostIncrement,
 }
 
-/// TODO: docs
+/// Field containg the opcode and opmode
 #[derive(Debug, Copy, Clone)]
-pub struct OpCodeField
+pub struct OpField
 {
-    pub opcode: OpCode,
+    pub op: OpCode,
     pub mode:   OpMode
 }
 
 /// TODO: docs
 #[derive(Debug, Copy, Clone)]
-pub struct InstructionField
+pub struct Field
 {
     pub offset:          isize,
-    pub addressing_mode: AddressingMode,
+    pub mode: AddressingMode,
 }
 
 /// Recode instruction
 #[derive(Debug, Copy, Clone)]
 pub struct Instruction
 {
-    pub op: OpCodeField,
-    pub a:  InstructionField,
-    pub b:  InstructionField
+    pub op: OpField,
+    pub a:  Field,
+    pub b:  Field
 }
-
-
 
