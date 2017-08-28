@@ -1,4 +1,4 @@
-//! Redcode simulator
+//! Corewars simulator
 
 mod error;
 pub use self::error::SimulatorError;

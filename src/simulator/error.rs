@@ -1,5 +1,6 @@
-/// Simulator errors
+//! Simulator errors
 
+/// Simulator errors
 #[derive(Debug, PartialEq, Eq)]
 pub enum SimulatorError
 {
@@ -7,3 +8,4 @@ pub enum SimulatorError
 
     PrematureTermination
 }
+

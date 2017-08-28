@@ -26,7 +26,7 @@ pub struct Simulator
     memory:        Vec<Instruction>,
 
     /// Current process id being run
-    active_pid:    usize,
+    active_pid:    Option<usize>,
 
     /// Program counter for each process currently loaded into memory
     process_queue: VecDeque<(usize, VecDeque<usize>)>
@@ -35,11 +35,17 @@ pub struct Simulator
 impl Simulator
 {
     /// Create a new simulator
+    ///
+    /// # Arguments
+    /// * `msize`: size of core memory
+    ///
+    /// # Return
+    /// `Simulator` with `msize` memory buffer
     pub fn new(msize: usize) -> Self
     {
         Simulator {
             memory: vec![DEFAULT_INSTRUCTION; msize], 
-            active_pid: 0,
+            active_pid: None,
             process_queue: VecDeque::new()
         }
     }
@@ -52,6 +58,10 @@ impl Simulator
     /// # Arguments
     /// * `program`: program to load into memory
     /// * `offset`: offset in memory the program will be loaded into
+    ///
+    /// # Return
+    /// Either `Ok(())` or `Err(SimulatorError::NotEnoughMemory)` When the 
+    /// program exceeds the size of the memory buffer
     pub fn load(&mut self, program: &Vec<Instruction>, offset: usize)
         -> Result<(), SimulatorError>
     {
@@ -68,7 +78,7 @@ impl Simulator
 
             // add to process queue
             let mut new_q = VecDeque::new();
-            let new_pid = self.process_queue.len() + 1;
+            let new_pid = self.process_queue.len();
 
             new_q.push_front(offset);
             self.process_queue.push_front((new_pid, new_q));
@@ -85,7 +95,7 @@ impl Simulator
         // get active process counter
         // TODO: better error handling
         if let Some((pid, mut q)) = self.process_queue.pop_back() {
-            self.active_pid = pid;
+            self.active_pid = Some(pid);
             let pc = q.pop_back().unwrap(); 
 
             // fetch phase
@@ -146,6 +156,7 @@ impl Simulator
     }
 
     /// Reset simulator to original state, dumping all currently loaded programs
+    /// and filling memory with `DEFAULT_INSTRUCTION`
     pub fn reset(&mut self)
     {
         let msize = self.memory.len();
@@ -154,7 +165,12 @@ impl Simulator
         self.process_queue = VecDeque::new();
     }
 
-    /// Completely simulate 
+    /// Completely simulate until termination
+    ///
+    /// # Return
+    /// A `Vec` containing all simulation events that occured during running
+    /// if no errors occured during runtime, or the error that caused the
+    /// simulator to crash
     pub fn complete(&mut self) -> Result<Vec<SimulatorEvent>, SimulatorError>
     {
         let mut events = vec![]; // order programs finish in
@@ -177,10 +193,15 @@ impl Simulator
     /// Execute `dat` instruction
     fn exec_dat(&mut self) -> SimulatorResult
     {
-        Ok(SimulatorEvent::Terminated(self.active_pid()))
+        Ok(SimulatorEvent::Terminated(self.active_pid().unwrap()))
     }
 
     /// Execute `mov` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_mov(&mut self, 
         mode: OpMode,
@@ -217,6 +238,11 @@ impl Simulator
     }
 
     /// Execute `add` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_add(&mut self, 
         mode: OpMode,
@@ -229,6 +255,11 @@ impl Simulator
     }
 
     /// Execute `sub` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_sub(&mut self, 
         mode: OpMode,
@@ -241,6 +272,11 @@ impl Simulator
     }
 
     /// Execute `mul` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_mul(&mut self, 
         mode: OpMode,
@@ -253,6 +289,11 @@ impl Simulator
     }
 
     /// Execute `div` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_div(&mut self, 
         mode: OpMode,
@@ -265,6 +306,11 @@ impl Simulator
     }
 
     /// Execute `mod` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_mod(&mut self, 
         mode: OpMode,
@@ -277,11 +323,16 @@ impl Simulator
     }
 
     /// Execute `jmp` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_jmp(&mut self, 
         mode: OpMode,
         a: Field,
-        b: Field
+        b: Field // FIXME: don't think this is necessary
         )
         -> SimulatorResult
     {
@@ -289,6 +340,11 @@ impl Simulator
     }
 
     /// Execute `jmz` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_jmz(&mut self, 
         mode: OpMode,
@@ -301,6 +357,11 @@ impl Simulator
     }
 
     /// Execute `jmn` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_jmn(&mut self, 
         mode: OpMode,
@@ -313,6 +374,11 @@ impl Simulator
     }
 
     /// Execute `djn` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_djn(&mut self, 
         mode: OpMode,
@@ -325,6 +391,11 @@ impl Simulator
     }
 
     /// Execute `spl` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_spl(&mut self, 
         mode: OpMode,
@@ -337,6 +408,11 @@ impl Simulator
     }
 
     /// Execute `cmp` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_cmp(&mut self, 
         mode: OpMode,
@@ -349,6 +425,11 @@ impl Simulator
     }
 
     /// Execute `seq` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_seq(&mut self, 
         mode: OpMode,
@@ -361,6 +442,11 @@ impl Simulator
     }
 
     /// Execute `sne` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_sne(&mut self, 
         mode: OpMode,
@@ -373,6 +459,11 @@ impl Simulator
     }
 
     /// Execute `slt` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_slt(&mut self, 
         mode: OpMode,
@@ -385,6 +476,11 @@ impl Simulator
     }
 
     /// Execute `ldp` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_ldp(&mut self, 
         mode: OpMode,
@@ -397,6 +493,11 @@ impl Simulator
     }
 
     /// Execute `stp` instruction
+    ///
+    /// # Arguments
+    /// * `mode`: Mode to execute instruction in
+    /// * `a`: A `Field` of the `Instruction`
+    /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
     fn exec_stp(&mut self, 
         mode: OpMode,
@@ -426,7 +527,7 @@ impl Simulator
 
     /// Get the current process id being run
     #[inline]
-    pub fn active_pid(&self) -> usize
+    pub fn active_pid(&self) -> Option<usize>
     {
         self.active_pid
     }
