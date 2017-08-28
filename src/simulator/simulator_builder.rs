@@ -1,6 +1,13 @@
 
-use redcode::Instruction;
+use redcode::{Instruction, OpMode, OpCode, OpField, AddressingMode, Field};
 use super::Simulator;
+
+/// Insruction that a core is loaded with by default
+pub const DEFAULT_INSTRUCTION: Instruction = Instruction {
+    op: OpField { mode: OpMode::I, op: OpCode::Dat },
+    a:  Field   { mode: AddressingMode::Direct, offset: 0 },
+    b:  Field   { mode: AddressingMode::Direct, offset: 0 },
+};
 
 // Simulator defaults (public?)
 const DEFAULT_CORE_SIZE: usize = 8000;
