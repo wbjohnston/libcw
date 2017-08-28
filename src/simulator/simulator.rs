@@ -1,9 +1,9 @@
 //! Redcode simulator
 
 use std::collections::VecDeque;
+use std::collections::HashMap;
 
 use redcode::*;
-use simulator::{SimulatorError, SimulatorEvent};
 
 pub type SimulatorResult = Result<SimulatorEvent, SimulatorError>;
 
@@ -14,11 +14,31 @@ pub const DEFAULT_INSTRUCTION: Instruction = Instruction {
     b:  Field   { mode: AddressingMode::Direct, offset: 0 },
 };
 
+/// Simulator runtime errors
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SimulatorError
+{
+    // Nothing here.
+    AllWarriorsTerminated
+}
+
+/// Events that can happen during a running simulation
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SimulatorEvent
+{
+    /// All processes terminated successfully
+    Finished,
+
+    Tied,
+
+    /// A process terminated
+    Terminated(usize),
+
+    /// Nothing happened
+    None,
+}
+
 /// Core wars Simulator
-///
-/// # Components
-/// 1. shared memory: TODO
-/// 2. process queue: TODO
 #[derive(Debug)]
 pub struct Simulator
 {
@@ -26,68 +46,24 @@ pub struct Simulator
     memory:        Vec<Instruction>,
 
     /// Current process id being run
-    active_pid:    Option<usize>,
+    active_pid:    usize,
+
+    /// Core version
+    version:       usize,
+
+    /// Maximum of processes that can be on the process queue at any time
+    max_processes: usize,
 
     /// Program counter for each process currently loaded into memory
-    process_queue: VecDeque<(usize, VecDeque<usize>)>
+    process_queue: VecDeque<(usize, VecDeque<usize>)>,
+
+    /// Private storage space for warriors
+    pspace:        HashMap<usize, Vec<Instruction>>
 }
 
 impl Simulator
 {
-    /// Create a new simulator
-    ///
-    /// # Arguments
-    /// * `msize`: size of core memory
-    ///
-    /// # Return
-    /// `Simulator` with `msize` memory buffer
-    pub fn new(msize: usize) -> Self
-    {
-        Simulator {
-            memory: vec![DEFAULT_INSTRUCTION; msize], 
-            active_pid: None,
-            process_queue: VecDeque::new()
-        }
-    }
-
-    ////////////
-    // Mutators
-    ////////////
-    /// Load a program into memory and add pid (player id)
-    ///
-    /// # Arguments
-    /// * `program`: program to load into memory
-    /// * `offset`: offset in memory the program will be loaded into
-    ///
-    /// # Return
-    /// Either `Ok(())` or `Err(SimulatorError::NotEnoughMemory)` When the 
-    /// program exceeds the size of the memory buffer
-    pub fn load(&mut self, program: &Vec<Instruction>, offset: usize)
-        -> Result<(), SimulatorError>
-    {
-        let msize = self.memory.len();
-
-        if program.len() > msize {
-            // program will overwrite itself if its loaded into memory
-            Err(SimulatorError::NotEnoughMemory)
-        } else { // copy program into memory
-            for i in 0..program.len() {
-                // programs wrap
-                self.memory[(i + offset) % msize] = program[i];
-            }
-
-            // add to process queue
-            let mut new_q = VecDeque::new();
-            let new_pid = self.process_queue.len();
-
-            new_q.push_front(offset);
-            self.process_queue.push_front((new_pid, new_q));
-
-            Ok(()) 
-        }
-    }
-
-    /// Step the simulator one instruction
+    /// Step forward one cycle
     pub fn step(&mut self) -> SimulatorResult
     {
         // TODO: this is written pretty badly
@@ -95,7 +71,7 @@ impl Simulator
         // get active process counter
         // TODO: better error handling
         if let Some((pid, mut q)) = self.process_queue.pop_back() {
-            self.active_pid = Some(pid);
+            self.active_pid = pid;
             let pc = q.pop_back().unwrap(); 
 
             // fetch phase
@@ -155,38 +131,6 @@ impl Simulator
         }
     }
 
-    /// Reset simulator to original state, dumping all currently loaded programs
-    /// and filling memory with `DEFAULT_INSTRUCTION`
-    pub fn reset(&mut self)
-    {
-        let msize = self.memory.len();
-
-        self.memory = vec![DEFAULT_INSTRUCTION; msize];
-        self.process_queue = VecDeque::new();
-    }
-
-    /// Completely simulate until termination
-    ///
-    /// # Return
-    /// A `Vec` containing all simulation events that occured during running
-    /// if no errors occured during runtime, or the error that caused the
-    /// simulator to crash
-    pub fn complete(&mut self) -> Result<Vec<SimulatorEvent>, SimulatorError>
-    {
-        let mut events = vec![]; // order programs finish in
-
-        loop {
-            let e = self.step()?;
-            events.push(e);
-
-            if e == SimulatorEvent::Finished {
-                break;
-            }
-        }
-
-        Ok(events)
-    }
-
     /////////////
     // Instruction Execution functions
     /////////////
@@ -210,30 +154,6 @@ impl Simulator
         )
         -> SimulatorResult
     {
-        match mode {
-            OpMode::A => {
-                // TODO
-            },
-            OpMode::B => {
-                // TODO
-            },
-            OpMode::AB => {
-                // TODO
-            },
-            OpMode::BA => {
-                // TODO
-            },
-            OpMode::X => {
-                // TODO
-            },
-            OpMode::F => {
-                // TODO
-            },
-            OpMode::I => {
-                // TODO
-            },
-        };
-
         unimplemented!();
     }
 

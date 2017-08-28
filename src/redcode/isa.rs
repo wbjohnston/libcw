@@ -125,16 +125,16 @@ pub enum AddressingMode
 #[derive(Debug, Copy, Clone)]
 pub struct OpField
 {
-    pub op: OpCode,
-    pub mode:   OpMode
+    pub op:   OpCode,
+    pub mode: OpMode
 }
 
 /// TODO: docs
 #[derive(Debug, Copy, Clone)]
 pub struct Field
 {
-    pub offset:          isize,
-    pub mode: AddressingMode,
+    pub offset: isize,
+    pub mode:   AddressingMode,
 }
 
 /// Recode instruction
