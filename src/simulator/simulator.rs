@@ -137,7 +137,7 @@ impl Simulator
     /// Execute `dat` instruction
     fn exec_dat(&mut self) -> SimulatorResult
     {
-        Ok(SimulatorEvent::Terminated(self.active_pid().unwrap()))
+        Ok(SimulatorEvent::Terminated(self.active_pid()))
     }
 
     /// Execute `mov` instruction
@@ -447,7 +447,7 @@ impl Simulator
 
     /// Get the current process id being run
     #[inline]
-    pub fn active_pid(&self) -> Option<usize>
+    pub fn active_pid(&self) -> usize
     {
         self.active_pid
     }
