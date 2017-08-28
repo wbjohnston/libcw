@@ -1,6 +1,8 @@
 # Core Wars Library
 Supporting functions and runtime for the game corewars
 
+![Travis Status](https://travis-ci.org/wbjohnston/libcw.svg?branch=master)
+
 ## License
 #### MIT
 Copyright © 2017 Will Johnston
