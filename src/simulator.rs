@@ -1,4 +1,5 @@
-//! Redcode simulator
+//! Datastructures and functions for building and simulating a redcode core
+
 
 use std::collections::{VecDeque, HashMap};
 
@@ -22,12 +23,17 @@ const DEFAULT_INSTRUCTION: Instruction = Instruction {
     b:  Field   { mode: AddressingMode::Direct, offset: 0 },
 };
 
-/// Simulator runtime errors
+/// Kinds of `Simulator` runtime errors
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum SimulatorError
+pub enum SimulatorErrorKind
 {
+    /// Thrown 
     AlreadyTerminated
 }
+
+/// Simulator runtime error
+#[derive(Debug, Copy, Clone)]
+pub struct SimulatorError;
 
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -46,6 +52,11 @@ pub enum SimulatorEvent
     None,
 }
 
+// TODO: I think that the call structure for the simulator is all wrong
+//      It leaves no access to the programs process queue, which is not good.
+//      I also don't really want to add a pointer to the active process queue
+//      need to think about to how organize it. Maybe pass the process queue
+//      as a parameter
 /// Core wars Simulator
 #[derive(Debug, Clone)]
 pub struct Simulator
@@ -119,7 +130,8 @@ impl Simulator
             Ok(exec_event)
         } else {
             // tried stepping after the core has terminated
-            Err(SimulatorError::AlreadyTerminated)
+            // Err(SimulatorError::AlreadyTerminated)
+            Err(SimulatorError{})
         }
     }
 
@@ -516,7 +528,7 @@ impl SimulatorBuilder
     }
 
     /// Load programs into memory and build a `Simulator`
-    pub fn load(&self, programs: Vec<(usize, Vec<Instruction>)>) 
+    pub fn load(&self, programs: Vec<(usize, Program)>) 
         -> Result<Simulator, BuilderError>
     {
         // FIXME: this function is shit mania dot com

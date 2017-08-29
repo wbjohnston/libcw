@@ -1,2 +1,0 @@
-//! Redcode assembly file parser
-

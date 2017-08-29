@@ -1,4 +1,5 @@
 /// Red Code instruction set architecture
+pub type Program = Vec<Instruction>;
 
 /// Operations that a redcode processor can perform
 ///
