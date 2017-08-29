@@ -24,17 +24,10 @@ const DEFAULT_INSTRUCTION: Instruction = Instruction {
 
 /// Kinds of `Simulator` runtime errors
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum SimulatorErrorKind
+pub enum SimulatorError
 {
     /// Thrown when trying to step after the simulation has already terminated
     AlreadyTerminated
-}
-
-/// Simulator runtime error
-#[derive(Debug, Copy, Clone)]
-pub struct SimulatorError
-{
-    kind: SimulatorErrorKind    
 }
 
 /// Events that can happen during a running simulation
@@ -99,31 +92,29 @@ impl Simulator
             // TODO: Predecrement phase
 
             // execution phase
-            let (mode, a, b) = (i.op.mode, i.a, i.b); 
             let exec_event = match i.op.op {
                 OpCode::Dat => self.exec_dat(),
-                OpCode::Mov => self.exec_mov(mode, a, b),
-                OpCode::Add => self.exec_add(mode, a, b),
-                OpCode::Sub => self.exec_sub(mode, a, b),
-                OpCode::Mul => self.exec_mul(mode, a, b),
-                OpCode::Div => self.exec_div(mode, a, b),
-                OpCode::Mod => self.exec_mod(mode, a, b),
-                OpCode::Jmp => self.exec_jmp(mode, a, b),
-                OpCode::Jmz => self.exec_jmz(mode, a, b),
-                OpCode::Jmn => self.exec_jmn(mode, a, b),
-                OpCode::Djn => self.exec_djn(mode, a, b),
-                OpCode::Spl => self.exec_spl(mode, a, b),
-                OpCode::Cmp => self.exec_cmp(mode, a, b),
-                OpCode::Seq => self.exec_seq(mode, a, b),
-                OpCode::Sne => self.exec_sne(mode, a, b),
-                OpCode::Slt => self.exec_slt(mode, a, b),
-                OpCode::Ldp => self.exec_ldp(mode, a, b),
-                OpCode::Stp => self.exec_stp(mode, a, b),
+                OpCode::Mov => self.exec_mov(&i, &mut q),
+                OpCode::Add => self.exec_add(&i, &mut q),
+                OpCode::Sub => self.exec_sub(&i, &mut q),
+                OpCode::Mul => self.exec_mul(&i, &mut q),
+                OpCode::Div => self.exec_div(&i, &mut q),
+                OpCode::Mod => self.exec_mod(&i, &mut q),
+                OpCode::Jmp => self.exec_jmp(&i, &mut q),
+                OpCode::Jmz => self.exec_jmz(&i, &mut q),
+                OpCode::Jmn => self.exec_jmn(&i, &mut q),
+                OpCode::Djn => self.exec_djn(&i, &mut q),
+                OpCode::Spl => self.exec_spl(&i, &mut q),
+                OpCode::Cmp => self.exec_cmp(&i, &mut q),
+                OpCode::Seq => self.exec_seq(&i, &mut q),
+                OpCode::Sne => self.exec_sne(&i, &mut q),
+                OpCode::Slt => self.exec_slt(&i, &mut q),
+                OpCode::Ldp => self.exec_ldp(&i, &mut q),
+                OpCode::Stp => self.exec_stp(&i, &mut q),
                 OpCode::Nop => self.exec_nop(),
             }?;
 
             // requeue process queue if there are still threads
-            // FIXME: I don't think that this design lets you `Spl`
             if exec_event != SimulatorEvent::Terminated(pid) {
                 self.process_queue.push_front((pid, q));
             }
@@ -133,7 +124,7 @@ impl Simulator
             Ok(exec_event)
         } else {
             // tried stepping after the core has terminated
-            Err(SimulatorError{ kind: SimulatorErrorKind::AlreadyTerminated })
+            Err(SimulatorError::AlreadyTerminated)
         }
     }
 
@@ -153,11 +144,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_mov(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_mov(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -170,11 +157,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_add(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_add(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -187,11 +170,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_sub(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_sub(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -204,11 +183,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_mul(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_mul(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -221,11 +196,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_div(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_div(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -238,11 +209,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_mod(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_mod(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -255,11 +222,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_jmp(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field // FIXME: don't think this is necessary
-        )
+    fn exec_jmp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -272,11 +235,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_jmz(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_jmz(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -289,11 +248,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_jmn(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_jmn(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -306,11 +261,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_djn(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_djn(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -323,11 +274,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_spl(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_spl(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -340,11 +287,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_cmp(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_cmp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -357,11 +300,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_seq(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_seq(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -374,11 +313,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_sne(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_sne(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -391,11 +326,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_slt(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_slt(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -408,11 +339,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_ldp(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_ldp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
@@ -425,11 +352,7 @@ impl Simulator
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
     #[allow(unused_variables)]
-    fn exec_stp(&mut self, 
-        mode: OpMode,
-        a: Field,
-        b: Field
-        )
+    fn exec_stp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
         -> SimulatorResult
     {
         unimplemented!();
