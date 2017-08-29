@@ -6,28 +6,28 @@
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OpCode
 {
-    /// Data instruction, kills process queue on execution
+    /// Data, kills process queue on execution
     Dat,
 
-    /// Move instruction
+    /// Move (copy)
     Mov,
 
-    /// Add instruction
+    /// Add
     Add,
 
-    /// Subtract instruction
+    /// Subtract
     Sub,
 
-    /// Multiply instruction
+    /// Multiply
     Mul,
 
-    /// Divide instruction
+    /// Divide
     Div,
 
-    /// Modulo instruction
+    /// Modulo
     Mod,
 
-    /// Jump instruction
+    /// Jump
     Jmp,
 
     /// Jump if zero
@@ -36,31 +36,31 @@ pub enum OpCode
     /// Jump if not zero
     Jmn,
     
-    /// TODO
+    /// Decrement by one and Jump if not zero
     Djn,
 
-    /// Split instruction
+    /// Create a new execution thread at target address
     Spl,
 
-    /// Compare instruction
+    /// Compare (same as `Seq`)
     Cmp,
 
-    /// Set if equal instruction
+    /// Skip if equal
     Seq,
     
-    /// Set if not equal instruction
+    /// Skip if not equal
     Sne,
 
-    /// Set if less than instruction
+    /// Skip if less than
     Slt,
 
-    /// TODO
+    /// Load from P-space
     Ldp,
 
-    /// TODO
+    /// Save to P-space
     Stp,
 
-    /// No operation instruction
+    /// No operation 
     Nop
 }
 
@@ -99,48 +99,80 @@ pub enum OpMode
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddressingMode
 {
-    /// TODO
+    /// Literal value e.g "2"
+    ///
+    /// Denoted by: `#`
+    Immediate,
+
+    /// Direct pointer to another instruction
+    ///
+    /// Denoted by: `$`
     Direct,
 
-    /// TODO
+    /// Indirect addressing by target's A field
+    ///
+    /// Denoted by: `*`
     AIndirect,
 
-    /// TODO
+    /// Indirect addressing by target's B field
+    ///
+    /// Denoted by: `@`
     BIndirect,
 
-    /// TODO
+    /// Indirect addressing by target's A field, target instructions A field is
+    /// decremented before calculating the target address
+    ///
+    /// Denoted by: `{`
     AIndirectPreDecrement,
 
-    /// TODO
+    /// Indirect addressing by target's A field, target instructions B field is
+    /// decremented before calculating the target address
+    ///
+    /// Denoted by: `<`
     BIndirectPreDecrement,
 
-    /// TODO
+    /// Indirect addressing by target's A field, target instructions B field is
+    /// incremented after calculating the target address
+    ///
+    /// Denoted by: `}`
     AIndirectPostIncrement,
 
-    /// TODO
+    /// Indirect addressing by target's B field, target instructions B field is
+    /// incremented after calculating the target address
+    ///
+    /// Denoted by: `>`
     BIndirectPostIncrement,
 }
 
 /// Field containg the opcode and opmode
+///
+/// TODO: longform
 #[derive(Debug, Copy, Clone)]
 pub struct OpField
 {
+    // FIXME: I don't like these public fields
     pub op:   OpCode,
     pub mode: OpMode
 }
 
-/// TODO: docs
+/// Non-`OpField` instruction field
+///
+/// TODO: longform
 #[derive(Debug, Copy, Clone)]
 pub struct Field
 {
+    // FIXME: I don't like these public fields
     pub offset: isize,
     pub mode:   AddressingMode,
 }
 
-/// Recode instruction
+/// Redcode instruction
+///
+/// TODO: longform
 #[derive(Debug, Copy, Clone)]
 pub struct Instruction
 {
+    // FIXME: I don't like these public fields
     pub op: OpField,
     pub a:  Field,
     pub b:  Field
