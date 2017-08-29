@@ -1,4 +1,6 @@
 /// Red Code instruction set architecture
+
+/// Alias for a program, which is just a list of instructions
 pub type Program = Vec<Instruction>;
 
 /// Operations that a redcode processor can perform

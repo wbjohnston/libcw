@@ -1,5 +1,8 @@
 //! Tools for parsing strings into usable redcode instructions
 
+// TODO: even though I literally just lifted this to a toplevel file, I can 
+// move the error information struct and enum into it's own file
+
 use redcode::Program;
 
 /// Result of a parse

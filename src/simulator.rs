@@ -1,6 +1,5 @@
 //! Datastructures and functions for building and simulating a redcode core
 
-
 use std::collections::{VecDeque, HashMap};
 
 use redcode::*;
@@ -8,13 +7,13 @@ use redcode::*;
 pub type SimulatorResult = Result<SimulatorEvent, SimulatorError>;
 
 // Simulator defaults (public?)
-const DEFAULT_CORE_SIZE: usize = 8000;
-const DEFAULT_PSPACE_SIZE: usize = 500;
-const DEFAULT_MAX_CYCLES: usize = 80000;
+const DEFAULT_CORE_SIZE: usize     = 8000;
+const DEFAULT_PSPACE_SIZE: usize   = 500;
+const DEFAULT_MAX_CYCLES: usize    = 80000;
 const DEFAULT_MAX_PROCESSES: usize = 8000;
-const DEFAULT_MAX_LENGTH: usize = 100;
-const DEFAULT_MIN_DISTANCE: usize = 100;
-const DEFAULT_VERSION: usize = 80; // FIXME: hmmm
+const DEFAULT_MAX_LENGTH: usize    = 100;
+const DEFAULT_MIN_DISTANCE: usize  = 100;
+const DEFAULT_VERSION: usize       = 80; // FIXME: hmmm
 
 /// Insruction that a core is loaded with by default
 const DEFAULT_INSTRUCTION: Instruction = Instruction {
@@ -27,13 +26,16 @@ const DEFAULT_INSTRUCTION: Instruction = Instruction {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SimulatorErrorKind
 {
-    /// Thrown 
+    /// Thrown when trying to step after the simulation has already terminated
     AlreadyTerminated
 }
 
 /// Simulator runtime error
 #[derive(Debug, Copy, Clone)]
-pub struct SimulatorError;
+pub struct SimulatorError
+{
+    kind: SimulatorErrorKind    
+}
 
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -127,11 +129,11 @@ impl Simulator
             }
 
             // TODO: PostIncrement phase
+
             Ok(exec_event)
         } else {
             // tried stepping after the core has terminated
-            // Err(SimulatorError::AlreadyTerminated)
-            Err(SimulatorError{})
+            Err(SimulatorError{ kind: SimulatorErrorKind::AlreadyTerminated })
         }
     }
 
@@ -482,7 +484,6 @@ pub enum BuilderError
     /// A provided offset would violate a constraint of the `Simulator`
     InvalidOffset
 }
-
 
 /// A `Simulator` builder. Provides control over how the `Simulator` is 
 /// configured
