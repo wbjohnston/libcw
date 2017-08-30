@@ -4,7 +4,7 @@
 
 pub mod redcode;
 
-pub mod simulator;
+pub mod simulation;
 
 pub mod parser;
 

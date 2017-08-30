@@ -1,12 +1,15 @@
-//! Datastructures and functions for building and simulating a redcode core
+//! Simulation runtime (aka `Core`) and tools to build a core
 
 use std::collections::{VecDeque, HashMap};
 
 use redcode::*;
 
-pub type SimulatorResult = Result<SimulatorEvent, SimulatorError>;
+use simulation::Event;
+use simulation::Error;
 
-// Simulator defaults (public?)
+pub type CoreResult<T> = Result<T, Error>;
+
+// Core defaults (public?)
 const DEFAULT_CORE_SIZE: usize     = 8000;
 const DEFAULT_PSPACE_SIZE: usize   = 500;
 const DEFAULT_MAX_CYCLES: usize    = 80000;
@@ -22,41 +25,16 @@ const DEFAULT_INSTRUCTION: Instruction = Instruction {
     b:  Field   { mode: AddressingMode::Direct, offset: 0 },
 };
 
-/// Kinds of `Simulator` runtime errors
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum SimulatorError
-{
-    /// Thrown when trying to step after the simulation has already terminated
-    AlreadyTerminated
-}
-
-/// Events that can happen during a running simulation
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum SimulatorEvent
-{
-    /// All processes terminated successfully
-    Finished,
-
-    /// Game ended in a tie
-    Tied,
-
-    /// A process terminated
-    Terminated(usize),
-
-    /// Nothing happened
-    None,
-}
-
 // TODO: I think that the call structure for the simulator is all wrong
 //      It leaves no access to the programs process queue, which is not good.
 //      I also don't really want to add a pointer to the active process queue
 //      need to think about to how organize it. Maybe pass the process queue
 //      as a parameter
-/// Core wars Simulator
+/// Core wars Core
 #[derive(Debug, Clone)]
-pub struct Simulator
+pub struct Core
 {
-    /// Simulator memory
+    /// Core memory
     memory:        Vec<Instruction>,
 
     /// Current process id being run
@@ -75,10 +53,11 @@ pub struct Simulator
     version:       usize,
 }
 
-impl Simulator
+impl Core
 {
     /// Step forward one cycle
-    pub fn step(&mut self) -> SimulatorResult
+    pub fn step(&mut self)
+        -> CoreResult<Event>
     {
         // FIXME: this is written pretty badly
         // get active process counter
@@ -87,44 +66,100 @@ impl Simulator
             let pc = q.pop_back().unwrap(); 
 
             // fetch phase
-            let i = self.memory[pc];
+            let i = self.fetch(pc);
 
             // TODO: Predecrement phase
 
             // execution phase
             let exec_event = match i.op.op {
                 OpCode::Dat => self.exec_dat(),
-                OpCode::Mov => self.exec_mov(&i, &mut q),
-                OpCode::Add => self.exec_add(&i, &mut q),
-                OpCode::Sub => self.exec_sub(&i, &mut q),
-                OpCode::Mul => self.exec_mul(&i, &mut q),
-                OpCode::Div => self.exec_div(&i, &mut q),
-                OpCode::Mod => self.exec_mod(&i, &mut q),
-                OpCode::Jmp => self.exec_jmp(&i, &mut q),
-                OpCode::Jmz => self.exec_jmz(&i, &mut q),
-                OpCode::Jmn => self.exec_jmn(&i, &mut q),
-                OpCode::Djn => self.exec_djn(&i, &mut q),
-                OpCode::Spl => self.exec_spl(&i, &mut q),
-                OpCode::Cmp => self.exec_cmp(&i, &mut q),
-                OpCode::Seq => self.exec_seq(&i, &mut q),
-                OpCode::Sne => self.exec_sne(&i, &mut q),
-                OpCode::Slt => self.exec_slt(&i, &mut q),
-                OpCode::Ldp => self.exec_ldp(&i, &mut q),
-                OpCode::Stp => self.exec_stp(&i, &mut q),
+                OpCode::Mov => self.exec_mov(&i),
+                OpCode::Add => self.exec_add(&i),
+                OpCode::Sub => self.exec_sub(&i),
+                OpCode::Mul => self.exec_mul(&i),
+                OpCode::Div => self.exec_div(&i),
+                OpCode::Mod => self.exec_mod(&i),
+                OpCode::Jmp => self.exec_jmp(&i),
+                OpCode::Jmz => self.exec_jmz(&i),
+                OpCode::Jmn => self.exec_jmn(&i),
+                OpCode::Djn => self.exec_djn(&i),
+                OpCode::Spl => self.exec_spl(&i),
+                OpCode::Cmp => self.exec_cmp(&i),
+                OpCode::Seq => self.exec_seq(&i),
+                OpCode::Sne => self.exec_sne(&i),
+                OpCode::Slt => self.exec_slt(&i),
+                OpCode::Ldp => self.exec_ldp(&i),
+                OpCode::Stp => self.exec_stp(&i),
                 OpCode::Nop => self.exec_nop(),
             }?;
 
             // requeue process queue if there are still threads
-            if exec_event != SimulatorEvent::Terminated(pid) {
-                self.process_queue.push_front((pid, q));
-            }
+            // TODO: process results of exec_* fns
 
             // TODO: PostIncrement phase
 
             Ok(exec_event)
         } else {
             // tried stepping after the core has terminated
-            Err(SimulatorError::AlreadyTerminated)
+            Err(Error::AlreadyTerminated)
+        }
+    }
+
+    /// Fetch `Instruction` at target address
+    ///
+    /// # Arguments
+    /// `addr`: address of `Instruction` to fetch
+    ///
+    /// # Return
+    /// `Instruction` at `addr`
+    fn fetch(&self, addr: usize) -> Instruction
+    {
+        let msize = self.memory.len();
+
+        self.memory[addr % msize]
+    }
+
+    /// Fetch an mutable reference to target `Instruction`
+    ///
+    /// # Arguments
+    /// * `addr`: address of `Instruction` to fetch
+    ///
+    /// # Return
+    /// mutable reference to `Instruction` at `addr`
+    fn fetch_mut(&mut self, addr: usize) -> &mut Instruction
+    {
+        let msize = self.memory.len();
+        &mut self.memory[addr % msize]
+    }
+
+    /// Calculate an address considering that address calculation is done 
+    /// modulo size of core
+    ///
+    /// # Arguments
+    /// * `addr`: base address
+    ///
+    /// # Return
+    /// address plus offset modulo core size
+    fn calc_addr(&self, addr: usize, offset: isize) -> usize
+    {
+        let is_negative = offset < 0;
+        let offset = -offset as usize;
+        let msize = self.memory.len();
+        
+        if is_negative {
+            // lower bound check    
+            if addr < offset {
+                msize - (offset - addr)
+            } else {
+                addr - offset
+            }
+        } else {
+            // upper bound check
+            if addr + offset > msize {
+                msize - addr + offset
+            } else {
+                addr + offset
+            }
         }
     }
 
@@ -132,9 +167,10 @@ impl Simulator
     // Instruction Execution functions
     /////////////
     /// Execute `dat` instruction
-    fn exec_dat(&mut self) -> SimulatorResult
+    fn exec_dat(&mut self) 
+        -> CoreResult<Event>
     {
-        Ok(SimulatorEvent::Terminated(self.active_pid()))
+        Ok(Event::Terminated(self.active_pid()))
     }
 
     /// Execute `mov` instruction
@@ -143,9 +179,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_mov(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_mov(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -156,9 +191,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_add(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_add(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -169,9 +203,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_sub(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_sub(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -182,9 +215,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_mul(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_mul(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -195,9 +227,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_div(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_div(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -208,9 +239,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_mod(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_mod(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -221,9 +251,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_jmp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_jmp(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -234,9 +263,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_jmz(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_jmz(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -247,9 +275,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_jmn(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_jmn(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -260,9 +287,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_djn(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_djn(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -273,9 +299,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_spl(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_spl(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -286,9 +311,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_cmp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_cmp(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -299,9 +323,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_seq(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_seq(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -312,9 +335,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_sne(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_sne(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -325,9 +347,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_slt(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_slt(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -338,9 +359,8 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_ldp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_ldp(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
@@ -351,17 +371,17 @@ impl Simulator
     /// * `mode`: Mode to execute instruction in
     /// * `a`: A `Field` of the `Instruction`
     /// * `b`: B `Field` of the `Instruction`
-    #[allow(unused_variables)]
-    fn exec_stp(&mut self, i: &Instruction, pq: &mut VecDeque<usize>)
-        -> SimulatorResult
+    fn exec_stp(&mut self, i: &Instruction)
+        -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `nop` instruction
-    fn exec_nop(&mut self) -> SimulatorResult
+    fn exec_nop(&mut self) 
+        -> CoreResult<Event>
     {
-        Ok(SimulatorEvent::None)
+        Ok(Event::None)
     }
 
     /////////////
@@ -397,21 +417,21 @@ impl Simulator
     }
 }
 
-/// Errors that can occur from invalid `SimulatorBuilder` configuration
+/// Errors that can occur from invalid `CoreBuilder` configuration
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BuilderError
 {
     /// Program is longer than the core allows
     ProgramTooLong,
 
-    /// A provided offset would violate a constraint of the `Simulator`
+    /// A provided offset would violate a constraint of the `Core`
     InvalidOffset
 }
 
-/// A `Simulator` builder. Provides control over how the `Simulator` is 
+/// A `Core` builder. Provides control over how the `Core` is 
 /// configured
 #[derive(Debug, Clone)]
-pub struct SimulatorBuilder
+pub struct CoreBuilder
 {
     /// Size of core's memory buffer
     core_size:     usize,
@@ -431,16 +451,16 @@ pub struct SimulatorBuilder
     /// Minimum distance between two warriors
     min_distance:  usize,
 
-    /// Simulator Version multiplied by 100
+    /// Core Version multiplied by 100
     version:       usize,
 }
 
-impl SimulatorBuilder
+impl CoreBuilder
 {
-    /// Create a `SimulatorBuilder` with default parameters
+    /// Create a `CoreBuilder` with default parameters
     pub fn new() -> Self
     {
-        SimulatorBuilder {
+        CoreBuilder {
             core_size:     DEFAULT_CORE_SIZE,
             pspace_size:   DEFAULT_PSPACE_SIZE,
             max_cycles:    DEFAULT_MAX_CYCLES,
@@ -451,9 +471,9 @@ impl SimulatorBuilder
         }
     }
 
-    /// Load programs into memory and build a `Simulator`
+    /// Load programs into memory and build a `Core`
     pub fn load(&self, programs: Vec<(usize, Program)>) 
-        -> Result<Simulator, BuilderError>
+        -> Result<Core, BuilderError>
     {
         // FIXME: this function is shit mania dot com
 
@@ -468,6 +488,10 @@ impl SimulatorBuilder
         let mut mem       = vec![DEFAULT_INSTRUCTION; self.core_size];
         let mut process_q = VecDeque::new();
         let mut pspace    = HashMap::new();
+
+        // Proposed change to all range checks
+        // create iterator of all spans for programs
+        // re-use that iterator to do range checks
 
         // sort programs by offset
         let mut sorted_programs = programs.clone();
@@ -520,7 +544,7 @@ impl SimulatorBuilder
             // TODO: check wrap around distance
         }
 
-        Ok(Simulator {
+        Ok(Core {
             memory:        mem,
             active_pid:    0,
             version:       self.version,
@@ -608,7 +632,7 @@ impl SimulatorBuilder
         self
     }
 
-    /// Simulator version multiplied by 100 (e.g. version 0.8 -> 80)
+    /// Core version multiplied by 100 (e.g. version 0.8 -> 80)
     /// # Arguments
     /// * `version`: version number
     /// # Return
