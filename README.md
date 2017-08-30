@@ -4,6 +4,8 @@ Supporting functions and runtime for the game corewars
 ![Travis Status](https://travis-ci.org/wbjohnston/libcw.svg?branch=master)
 
 ## RedCode
+Core Wars programs are written in a custom assembly-like language named redcode.
+
 #### Redcode Opcodes
 |Opcode                  |Description                                          |
 |:----------------------:|:----------------------------------------------------|
@@ -52,16 +54,62 @@ Supporting functions and runtime for the game corewars
 
 ### Example Programs
 #### The Imp
+The Imp is a simple program that just copies itself forward one address forever
 ```
-    MOV 0, 1
+MOV 0, 1
+```
+
+```
+# Tick 0
+    ...
+    MOV 0, 1 <--- PC
+    ...      <--- Target
+
+# Tick 1
+    ...
+    MOV 0, 1 
+    MOV 0, 1 <--- PC
+    ...      <--- Target
 ```
 
 #### The Dwarf
+The Dwarf *bombs* the core at regular intervals, but if the coresize is a
+multiple of 4, it will not bomb itself
+
 ```
     ADD #4, 3
     MOV 2, @2
     JMP -2
     DAT #0, #0
+```
+
+```
+# Tick 0
+    ...
+    ADD #4, 3   <--- PC
+    MOV 2, @2
+    JMP -2
+    DAT #0, #0  <--- Target
+    ...
+
+# Tick 1
+    ...
+    ADD #4, 3
+    MOV 2, @2   <--- PC
+    JMP -2
+    DAT #0, #4  <--- Target
+    ...
+    Dat #0, #4  <--- Indirect target
+    ...
+# Tick 2
+    ...
+    ADD #4, 3   <--- Target
+    MOV 2, @2   
+    JMP -2      <--- PC
+    DAT #0, #4  
+    ...
+    Dat #0, #4  
+    ...
 ```
 
 ## License
