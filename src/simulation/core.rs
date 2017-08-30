@@ -20,9 +20,12 @@ const DEFAULT_VERSION: usize       = 80; // FIXME: hmmm
 
 /// Insruction that a core is loaded with by default
 const DEFAULT_INSTRUCTION: Instruction = Instruction {
-    op: OpField { mode: OpMode::I, op: OpCode::Dat },
-    a:  Field   { mode: AddressingMode::Direct, offset: 0 },
-    b:  Field   { mode: AddressingMode::Direct, offset: 0 },
+    op:     OpCode::Dat,
+    mode:   OpMode::I,
+    a:      0,
+    a_mode: AddressingMode::Direct,
+    b:      0,
+    b_mode: AddressingMode::Direct,
 };
 
 // TODO: I think that the call structure for the simulator is all wrong
@@ -71,7 +74,7 @@ impl Core
             // TODO: Predecrement phase
 
             // execution phase
-            let exec_event = match i.op.op {
+            let exec_event = match i.op {
                 OpCode::Dat => self.exec_dat(),
                 OpCode::Mov => self.exec_mov(&i),
                 OpCode::Add => self.exec_add(&i),

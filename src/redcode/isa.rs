@@ -1,7 +1,13 @@
 /// Red Code instruction set architecture
 
+// TODO: Remove all of the `*Field` structs and make `Instruction` monolothic
+
 /// Alias for a program, which is just a list of instructions
 pub type Program = Vec<Instruction>;
+
+pub type Address = usize;
+
+pub type Offset = isize;
 
 /// Operations that a redcode processor can perform
 ///
@@ -147,37 +153,18 @@ pub enum AddressingMode
     BIndirectPostIncrement,
 }
 
-/// Field containg the opcode and opmode
-///
-/// TODO: longform
-#[derive(Debug, Copy, Clone)]
-pub struct OpField
-{
-    // FIXME: I don't like these public fields
-    pub op:   OpCode,
-    pub mode: OpMode
-}
-
-/// Non-`OpField` instruction field
-///
-/// TODO: longform
-#[derive(Debug, Copy, Clone)]
-pub struct Field
-{
-    // FIXME: I don't like these public fields
-    pub offset: isize,
-    pub mode:   AddressingMode,
-}
-
 /// Redcode instruction
 ///
 /// TODO: longform
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Instruction
 {
     // FIXME: I don't like these public fields
-    pub op: OpField,
-    pub a:  Field,
-    pub b:  Field
+    pub op: OpCode,
+    pub mode: OpMode,
+    pub a:  Address,
+    pub a_mode: AddressingMode,
+    pub b:  Address,
+    pub b_mode: AddressingMode,
 }
 
