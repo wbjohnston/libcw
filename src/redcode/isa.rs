@@ -2,8 +2,6 @@
 
 use std::default::Default;
 
-// TODO: Remove all of the `*Field` structs and make `Instruction` monolothic
-
 /// Alias for a program, which is just a list of instructions
 pub type Program = Vec<Instruction>;
 
@@ -12,8 +10,6 @@ pub type Address = usize;
 pub type Offset = isize;
 
 /// Operations that a redcode processor can perform
-///
-/// TODO: longform explanation
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OpCode
 {
@@ -77,8 +73,6 @@ pub enum OpCode
 
 /// Controls modes for what components of an instruction and OPCODE will 
 /// operate on
-///
-/// TODO: examples
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OpMode
 {
@@ -153,28 +147,50 @@ pub enum AddressingMode
     BIndirectPostIncrement,
 }
 
+/// Field Containg the `OpCode` and `OpMode`
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct OpField
+{
+    pub code: OpCode,
+    pub mode: OpMode
+}
+
+/// Field containing addressing mode and offset
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Field
+{
+    pub offset: Offset,
+    pub mode:   AddressingMode
+}
+
 /// Redcode instruction
-///
-/// TODO: longform
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Instruction
 {
     // FIXME: I don't like these public fields
-    pub op:     OpCode,
-    pub mode:   OpMode,
-    pub a:      Offset,
-    pub a_mode: AddressingMode,
-    pub b:      Offset,
-    pub b_mode: AddressingMode,
+    pub op: OpField,
+    pub a:  Field,
+    pub b:  Field
 }
-
-// TODO: Bust out fields into their own structs: AGAIN!
 
 impl Default for Instruction
 {
     fn default() -> Self
     {
-        unimplemented!();
+        Instruction {
+            op: OpField {
+                code: OpCode::Dat,
+                mode: OpMode::F
+            },
+            a: Field {
+                offset: 0,
+                mode: AddressingMode::Direct
+            },
+            b: Field {
+                offset: 0,
+                mode: AddressingMode::Direct
+            }
+        }
     }
 }
 

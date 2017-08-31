@@ -20,16 +20,6 @@ const DEFAULT_MAX_LENGTH: usize    = 100;
 const DEFAULT_MIN_DISTANCE: usize  = 100;
 const DEFAULT_VERSION: usize       = 80; // FIXME: hmmm
 
-/// Insruction that a core is loaded with by default
-const DEFAULT_INSTRUCTION: Instruction = Instruction {
-    op:     OpCode::Dat,
-    mode:   OpMode::I,
-    a:      0,
-    a_mode: AddressingMode::Direct,
-    b:      0,
-    b_mode: AddressingMode::Direct,
-};
-
 // TODO: I think that the call structure for the simulator is all wrong
 //      It leaves no access to the programs process queue, which is not good.
 //      I also don't really want to add a pointer to the active process queue
@@ -77,7 +67,7 @@ impl Core
             let i = self.fetch(pc);
 
             // execution phase
-            let exec_event = match i.op {
+            let exec_event = match i.op.code {
                 OpCode::Dat => self.exec_dat(),
                 OpCode::Mov => self.exec_mov(i, pc),
                 OpCode::Add => self.exec_add(),
@@ -190,7 +180,7 @@ impl Core
                 AddressingMode::AIndirectPreDecrement |
                 AddressingMode::AIndirectPostIncrement => 
             {
-                let indirect_offset = self.fetch(direct_addr).a;    
+                let indirect_offset = self.fetch(direct_addr).a.offset;    
 
                 self.calc_addr(direct_addr, indirect_offset)
             },
@@ -199,7 +189,7 @@ impl Core
                 AddressingMode::BIndirectPreDecrement |
                 AddressingMode::BIndirectPostIncrement =>
             {
-                let indirect_offset = self.fetch(direct_addr).b;    
+                let indirect_offset = self.fetch(direct_addr).b.offset;    
                 self.calc_addr(direct_addr, indirect_offset)
             },
 
@@ -227,48 +217,40 @@ impl Core
     fn exec_mov(&mut self, i: Instruction, pc: Address)
         -> CoreResult<Event>
     {
-        let source_addr = self.calc_target_addr(pc, i.a, i.a_mode);
-        let target_addr = self.calc_target_addr(pc, i.b, i.b_mode);
+        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
+        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
 
         let source = self.fetch(source_addr);
         let target = self.fetch_mut(target_addr);
 
-        match i.mode {
+        match i.op.mode {
             // A -> A
             OpMode::A  => {
                 target.a      = source.a;
-                target.a_mode = source.a_mode;
             }
             // B -> B
             OpMode::B  => {
                 target.b      = source.b;
-                target.b_mode = source.b_mode;
             }
             // A -> B
             OpMode::AB => {
                 target.b      = source.a;
-                target.b_mode = source.a_mode;
             }
             // B -> A
             OpMode::BA => {
                 target.a      = source.b;
-                target.a_mode = source.b_mode;
             }
             // A -> B, B -> A
             OpMode::X  => {
                 target.b      = source.a;
-                target.b_mode = source.a_mode;
             
                 target.a      = source.b;
-                target.a_mode = source.b_mode;
             }
             // A -> A, B -> B
             OpMode::F  => {
                 target.a      = source.a;
-                target.a_mode = source.a_mode;
             
                 target.b      = source.b;
-                target.b_mode = source.b_mode;
             }
             // Whole instruction
             OpMode::I  => {
@@ -367,7 +349,7 @@ impl Core
         -> CoreResult<Event>
     {
         if self.process_count() >= self.max_processes {
-            Ok(Event::Split(0)) // TODO: nah
+            Ok(Event::Split(0)) // TODO: placeholder
         } else {
             Ok(Event::None)
         }
@@ -568,7 +550,7 @@ impl CoreBuilder
         // 4. Add local process queue to global process queue
 
         // init struct data structures
-        let mut mem       = vec![DEFAULT_INSTRUCTION; self.core_size];
+        let mut mem       = vec![Instruction::default(); self.core_size];
         let mut process_q = VecDeque::new();
         let mut pspace    = HashMap::new();
 
@@ -613,7 +595,7 @@ impl CoreBuilder
             process_q.push_back((pid, local_q));
             
             // create pspace using the PID as the key
-            let local_pspace = vec![DEFAULT_INSTRUCTION; self.pspace_size];
+            let local_pspace = vec![Instruction::default(); self.pspace_size];
             pspace.insert(pid, local_pspace);
         }
 
