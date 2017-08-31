@@ -211,6 +211,8 @@ impl Core
     // Instruction Execution functions
     /////////////
     /// Execute `dat` instruction
+    ///
+    /// Supported OpModes: None
     fn exec_dat(&mut self) 
         -> CoreResult<Event>
     {
@@ -220,6 +222,8 @@ impl Core
     }
 
     /// Execute `mov` instruction
+    /// 
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_mov(&mut self, i: Instruction, pc: Address)
         -> CoreResult<Event>
     {
@@ -276,6 +280,8 @@ impl Core
     }
 
     /// Execute `add` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_add(&mut self)
         -> CoreResult<Event>
     {
@@ -283,6 +289,8 @@ impl Core
     }
 
     /// Execute `sub` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_sub(&mut self)
         -> CoreResult<Event>
     {
@@ -290,6 +298,8 @@ impl Core
     }
 
     /// Execute `mul` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_mul(&mut self)
         -> CoreResult<Event>
     {
@@ -297,6 +307,8 @@ impl Core
     }
 
     /// Execute `div` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_div(&mut self)
         -> CoreResult<Event>
     {
@@ -304,6 +316,8 @@ impl Core
     }
 
     /// Execute `mod` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_mod(&mut self)
         -> CoreResult<Event>
     {
@@ -311,6 +325,8 @@ impl Core
     }
 
     /// Execute `jmp` instruction
+    ///
+    /// Supported OpModes: `B`
     fn exec_jmp(&mut self)
         -> CoreResult<Event>
     {
@@ -318,6 +334,8 @@ impl Core
     }
 
     /// Execute `jmz` instruction
+    ///
+    /// Supported OpModes: `B`
     fn exec_jmz(&mut self)
         -> CoreResult<Event>
     {
@@ -325,6 +343,8 @@ impl Core
     }
 
     /// Execute `jmn` instruction
+    ///
+    /// Supported OpModes: `B`
     fn exec_jmn(&mut self)
         -> CoreResult<Event>
     {
@@ -332,6 +352,8 @@ impl Core
     }
 
     /// Execute `djn` instruction
+    ///
+    /// Supported OpModes: `B`
     fn exec_djn(&mut self)
         -> CoreResult<Event>
     {
@@ -339,6 +361,8 @@ impl Core
     }
 
     /// Execute `spl` instruction
+    ///
+    /// Supported OpModes: `B`
     fn exec_spl(&mut self)
         -> CoreResult<Event>
     {
@@ -350,6 +374,8 @@ impl Core
     }
 
     /// Execute `cmp` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_cmp(&mut self)
         -> CoreResult<Event>
     {
@@ -357,6 +383,8 @@ impl Core
     }
 
     /// Execute `seq` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_seq(&mut self)
         -> CoreResult<Event>
     {
@@ -364,6 +392,8 @@ impl Core
     }
 
     /// Execute `sne` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_sne(&mut self)
         -> CoreResult<Event>
     {
@@ -371,6 +401,8 @@ impl Core
     }
 
     /// Execute `slt` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_slt(&mut self)
         -> CoreResult<Event>
     {
@@ -378,6 +410,8 @@ impl Core
     }
 
     /// Execute `ldp` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_ldp(&mut self)
         -> CoreResult<Event>
     {
@@ -385,6 +419,8 @@ impl Core
     }
 
     /// Execute `stp` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_stp(&mut self)
         -> CoreResult<Event>
     {
@@ -392,6 +428,8 @@ impl Core
     }
 
     /// Execute `nop` instruction
+    ///
+    /// Supported OpModes: None
     fn exec_nop(&mut self) 
         -> CoreResult<Event>
     {
