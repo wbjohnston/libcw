@@ -1,5 +1,7 @@
 /// Red Code instruction set architecture
 
+use std::default::Default;
+
 // TODO: Remove all of the `*Field` structs and make `Instruction` monolothic
 
 /// Alias for a program, which is just a list of instructions
@@ -164,5 +166,15 @@ pub struct Instruction
     pub a_mode: AddressingMode,
     pub b:      Offset,
     pub b_mode: AddressingMode,
+}
+
+// TODO: Bust out fields into their own structs: AGAIN!
+
+impl Default for Instruction
+{
+    fn default() -> Self
+    {
+        unimplemented!();
+    }
 }
 
