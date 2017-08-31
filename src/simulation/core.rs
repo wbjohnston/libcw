@@ -101,6 +101,18 @@ impl Core
         }
     }
 
+    /// Get the program counters for all processes
+    pub fn pcs(&self) -> Vec<Address>
+    {
+        unimplemented!();
+    }
+
+    /// Get all `PID`s that are currently active
+    pub fn pids(&self) -> Vec<PID>
+    {
+        self.process_queue.iter().map(|&(pid, _)| pid).collect()
+    }
+
     /// Size of memory
     pub fn size(&self) -> usize
     {
@@ -225,37 +237,25 @@ impl Core
 
         match i.op.mode {
             // A -> A
-            OpMode::A  => {
-                target.a      = source.a;
-            }
+            OpMode::A  => target.a = source.a,
             // B -> B
-            OpMode::B  => {
-                target.b      = source.b;
-            }
+            OpMode::B  => target.b = source.b,
             // A -> B
-            OpMode::AB => {
-                target.b      = source.a;
-            }
+            OpMode::AB => target.b = source.a,
             // B -> A
-            OpMode::BA => {
-                target.a      = source.b;
-            }
+            OpMode::BA => target.a = source.b,
             // A -> B, B -> A
             OpMode::X  => {
                 target.b      = source.a;
-            
                 target.a      = source.b;
             }
             // A -> A, B -> B
             OpMode::F  => {
                 target.a      = source.a;
-            
                 target.b      = source.b;
             }
             // Whole instruction
-            OpMode::I  => {
-                *target = source;
-            }
+            OpMode::I  => *target = source,
         };
 
         Ok(Event::None)
