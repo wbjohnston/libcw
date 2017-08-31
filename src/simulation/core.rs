@@ -513,13 +513,19 @@ impl CoreBuilder
     /// use libcw::redcode::*;
     ///
     /// // Build program
-    /// let ins = Instruction{
-    ///         op: OpCode::Mov,
-    ///         mode: OpMode::I,
-    ///         a: 0,
-    ///         a_mode: AddressingMode::Direct,
-    ///         b: 1,
-    ///         b_mode: AddressingMode::Direct
+    /// let ins = Instruction {
+    ///     op: OpField {
+    ///         code: OpCode::Mov,
+    ///         mode: OpMode::I
+    ///         },
+    ///     a: Field {
+    ///         offset: 0,
+    ///         mode: AddressingMode::Direct
+    ///         },
+    ///     b: Field {
+    ///         offset: 0,
+    ///         mode: AddressingMode::Direct
+    ///         },
     ///     };
     ///
     /// let program = vec![ins; 10];
@@ -712,14 +718,7 @@ impl CoreBuilder
     ///
     /// use libcw::redcode::{OpMode, OpCode, AddressingMode, Instruction};
     ///
-    /// let ins = Instruction{
-    ///     op: OpCode::Dat,
-    ///     mode: OpMode::I,
-    ///     a: 0,
-    ///     a_mode: AddressingMode::Direct,
-    ///     b: 0,
-    ///     b_mode: AddressingMode::Direct
-    ///     };
+    /// let ins = Instruction::default();
     /// 
     /// let core = CoreBuilder::new()
     ///     .max_length(100)

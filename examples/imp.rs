@@ -1,7 +1,14 @@
 /// A core running the imp program
 
 extern crate libcw;
-use libcw::redcode::{Instruction, OpCode, OpMode, AddressingMode};
+use libcw::redcode::{
+    Instruction,
+    OpCode,
+    OpMode,
+    AddressingMode,
+    OpField,
+    Field
+    };
 use libcw::simulation::{Core, CoreBuilder, Event};
 
 
@@ -9,12 +16,18 @@ fn main()
 {
     let imp = vec![
         Instruction{ 
-            op:     OpCode::Mov,
-            mode:   OpMode::I,
-            a:      0,
-            a_mode: AddressingMode::Direct,
-            b:      1,
-            b_mode: AddressingMode::Direct
+            op: OpField {
+                code:   OpCode::Mov,
+                mode:   OpMode::I
+            },
+            a: Field {
+                offset: 0,
+                mode:   AddressingMode::Direct
+            },
+            b: Field {
+                offset: 1,
+                mode:   AddressingMode::Direct
+            }
         },
     ];
 
