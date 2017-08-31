@@ -5,7 +5,7 @@ use std::collections::{VecDeque, HashMap};
 use redcode::{Instruction, Address, Program};
 use simulation::Core;
 
-// Core defaults (public?)
+// Core defaults
 const DEFAULT_CORE_SIZE: usize     = 8000;
 const DEFAULT_PSPACE_SIZE: usize   = 500;
 const DEFAULT_MAX_CYCLES: usize    = 80000;

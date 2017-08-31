@@ -1,5 +1,13 @@
 //! Simulation runtime (aka `Core`) and tools to build a core
 
+// TODO: add functions for hot-loading proceses
+// TODO: implement all exec_* functions
+// TODO: I think that the call structure for the simulator is all wrong
+//      It leaves no access to the programs process queue, which is not good.
+//      I also don't really want to add a pointer to the active process queue
+//      need to think about to how organize it. Maybe pass the process queue
+//      as a parameter
+
 use std::collections::{VecDeque, HashMap};
 use std::fmt;
 use std::error::Error;
@@ -59,12 +67,7 @@ impl Error for CoreError
 }
 
 
-// TODO: I think that the call structure for the simulator is all wrong
-//      It leaves no access to the programs process queue, which is not good.
-//      I also don't really want to add a pointer to the active process queue
-//      need to think about to how organize it. Maybe pass the process queue
-//      as a parameter
-/// Core wars Core
+/// Core wars runtime
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Core
 {
