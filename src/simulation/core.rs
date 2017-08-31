@@ -1,24 +1,63 @@
 //! Simulation runtime (aka `Core`) and tools to build a core
 
 use std::collections::{VecDeque, HashMap};
+use std::fmt;
+use std::error::Error;
 
 use redcode::*;
-
-use simulation::{Event, Error};
 
 /// Process ID
 pub type PID = usize;
 
-pub type CoreResult<T> = Result<T, Error>;
+pub type CoreResult<T> = Result<T, CoreError>;
 
-// Core defaults (public?)
-const DEFAULT_CORE_SIZE: usize     = 8000;
-const DEFAULT_PSPACE_SIZE: usize   = 500;
-const DEFAULT_MAX_CYCLES: usize    = 80000;
-const DEFAULT_MAX_PROCESSES: usize = 8000;
-const DEFAULT_MAX_LENGTH: usize    = 100;
-const DEFAULT_MIN_DISTANCE: usize  = 100;
-const DEFAULT_VERSION: usize       = 80; // FIXME: hmmm
+/// Events that can happen during a running simulation
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CoreEvent
+{
+    /// All processes terminated successfully
+    Finished,
+
+    /// Game ended in a tie
+    Tied,
+
+    /// Process split inner contains address of new pc
+    Split(usize),
+
+    /// A process terminated
+    Terminated(usize),
+
+    /// Nothing happened
+    None,
+}
+
+/// Kinds of `Simulator` runtime errors
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CoreError
+{
+    /// Thrown when trying to step after the simulation has already terminated
+    AlreadyTerminated
+}
+
+impl fmt::Display for CoreError
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        write!(f, "TODO") // TODO
+    }
+}
+
+impl Error for CoreError
+{
+    fn description(&self) -> &str
+    {
+        match *self {
+            CoreError::AlreadyTerminated => 
+                "Cannot step after simulator has terminated"
+        }
+    }
+}
+
 
 // TODO: I think that the call structure for the simulator is all wrong
 //      It leaves no access to the programs process queue, which is not good.
@@ -30,32 +69,32 @@ const DEFAULT_VERSION: usize       = 80; // FIXME: hmmm
 pub struct Core
 {
     /// Core memory
-    memory:        Vec<Instruction>,
+    pub(super) memory:        Vec<Instruction>,
 
     /// Current process id being run
-    last_pid:    Option<PID>,
+    pub(super) last_pid:    Option<PID>,
 
     /// Maximum of processes that can be on the process queue at any time
-    max_processes: usize,
+    pub(super) max_processes: usize,
 
     /// Maximum number of cycles that can pass before a tie is declared
-    max_cycles:    usize,
+    pub(super) max_cycles:    usize,
 
     /// Program counter for each process currently loaded into memory
-    process_queue: VecDeque<(PID, VecDeque<usize>)>,
+    pub(super) process_queue: VecDeque<(PID, VecDeque<usize>)>,
 
     /// Private storage space for warriors
-    pspace:        HashMap<usize, Vec<Instruction>>,
+    pub(super) pspace:        HashMap<usize, Vec<Instruction>>,
 
     /// Core version
-    version:       usize,
+    pub(super) version:       usize,
 }
 
 impl Core
 {
     /// Step forward one cycle
     pub fn step(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         // FIXME: this is written pretty badly
         // get active process counter
@@ -97,7 +136,7 @@ impl Core
             Ok(exec_event)
         } else {
             // tried stepping after the core has terminated
-            Err(Error::AlreadyTerminated)
+            Err(CoreError::AlreadyTerminated)
         }
     }
 
@@ -216,18 +255,18 @@ impl Core
     ///
     /// Supported OpModes: None
     fn exec_dat(&mut self) 
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         // we can unwrap this because my the time any exec functions have been
         // called, a pid has been loaded into the `last_pid` field
-        Ok(Event::Terminated(self.last_pid.unwrap()))
+        Ok(CoreEvent::Terminated(self.last_pid.unwrap()))
     }
 
     /// Execute `mov` instruction
     /// 
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_mov(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
         let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
@@ -258,14 +297,14 @@ impl Core
             OpMode::I  => *target = source,
         };
 
-        Ok(Event::None)
+        Ok(CoreEvent::None)
     }
 
     /// Execute `add` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_add(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -274,7 +313,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_sub(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -283,7 +322,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_mul(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -292,7 +331,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_div(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -301,7 +340,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_mod(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -310,7 +349,7 @@ impl Core
     ///
     /// Supported OpModes: `B`
     fn exec_jmp(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -319,7 +358,7 @@ impl Core
     ///
     /// Supported OpModes: `B`
     fn exec_jmz(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -328,7 +367,7 @@ impl Core
     ///
     /// Supported OpModes: `B`
     fn exec_jmn(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -337,7 +376,7 @@ impl Core
     ///
     /// Supported OpModes: `B`
     fn exec_djn(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -346,12 +385,12 @@ impl Core
     ///
     /// Supported OpModes: `B`
     fn exec_spl(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         if self.process_count() >= self.max_processes {
-            Ok(Event::Split(0)) // TODO: placeholder
+            Ok(CoreEvent::Split(0)) // TODO: placeholder
         } else {
-            Ok(Event::None)
+            Ok(CoreEvent::None)
         }
     }
 
@@ -359,7 +398,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_cmp(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -368,7 +407,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_seq(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -377,7 +416,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_sne(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -386,7 +425,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_slt(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -395,7 +434,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_ldp(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -404,7 +443,7 @@ impl Core
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_stp(&mut self)
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
         unimplemented!();
     }
@@ -413,9 +452,9 @@ impl Core
     ///
     /// Supported OpModes: None
     fn exec_nop(&mut self) 
-        -> CoreResult<Event>
+        -> CoreResult<CoreEvent>
     {
-        Ok(Event::None)
+        Ok(CoreEvent::None)
     }
 
     /////////////
@@ -448,320 +487,6 @@ impl Core
     {
         // count length of all local process queues in the global pqueue
         self.process_queue.iter().fold(0, |acc, &(_, ref x)| acc + x.len())
-    }
-}
-
-/// Errors that can occur from invalid `CoreBuilder` configuration
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum BuilderError
-{
-    /// Program is longer than the core allows
-    ProgramTooLong,
-
-    /// A provided offset would violate a constraint of the `Core`
-    InvalidOffset
-}
-
-/// A `Core` builder. Provides control over how the `Core` is 
-/// configured
-#[derive(Debug, Clone)]
-pub struct CoreBuilder
-{
-    /// Size of core's memory buffer
-    core_size:     usize,
-
-    /// Size of each warrior's p-space
-    pspace_size:   usize,
-
-    /// Maximum number of cycles before game is considered a draw
-    max_cycles:    usize,
-
-    /// Maximum number of processes that can be in the process queue
-    max_processes: usize,
-
-    /// Maximum number of instructions a warrior can be comprised of
-    max_length:    usize,
-
-    /// Minimum distance between two warriors
-    min_distance:  usize,
-
-    /// Core Version multiplied by 100
-    version:       usize,
-}
-
-impl CoreBuilder
-{
-    /// Create a `CoreBuilder` with default parameters
-    pub fn new() -> Self
-    {
-        CoreBuilder {
-            core_size:     DEFAULT_CORE_SIZE,
-            pspace_size:   DEFAULT_PSPACE_SIZE,
-            max_cycles:    DEFAULT_MAX_CYCLES,
-            max_processes: DEFAULT_MAX_PROCESSES,
-            max_length:    DEFAULT_MAX_LENGTH,
-            min_distance:  DEFAULT_MIN_DISTANCE,
-            version:       DEFAULT_VERSION
-        }
-    }
-
-    /// Load programs into memory and build a `Core`
-    /// 
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::*;
-    /// use libcw::redcode::*;
-    ///
-    /// // Build program
-    /// let ins = Instruction {
-    ///     op: OpField {
-    ///         code: OpCode::Mov,
-    ///         mode: OpMode::I
-    ///         },
-    ///     a: Field {
-    ///         offset: 0,
-    ///         mode: AddressingMode::Direct
-    ///         },
-    ///     b: Field {
-    ///         offset: 0,
-    ///         mode: AddressingMode::Direct
-    ///         },
-    ///     };
-    ///
-    /// let program = vec![ins; 10];
-    ///
-    /// let starting_address = 100; // program will be loaded at this addr
-    /// let core = CoreBuilder::new()
-    ///     .load(vec![(starting_address, program.clone())])
-    ///     .unwrap();
-    ///
-    ///let (start, end) = (starting_address, starting_address + program.len());
-    ///
-    /// assert_eq!(
-    ///     core.memory().as_slice()[start..end],
-    ///     program.as_slice()
-    /// );
-    /// 
-    /// ```
-    pub fn load(&self, programs: Vec<(Address, Program)>) 
-        -> Result<Core, BuilderError>
-    {
-        // FIXME: this function is shit mania dot com
-
-        // **things that happen in this function**
-        // 1. Verify that the programs can fit in memory space with the
-        //      correct distance
-        // 2. Verify that all programs are less than `max_length`
-        // 3. Load programs into memory at the correct offsets
-        // 4. Add local process queue to global process queue
-
-        // init struct data structures
-        let mut mem       = vec![Instruction::default(); self.core_size];
-        let mut process_q = VecDeque::new();
-        let mut pspace    = HashMap::new();
-
-        // Proposed change to all range checks
-        // create iterator of all spans for programs
-        // re-use that iterator to do range checks
-
-        // sort programs by offset
-        let mut sorted_programs = programs.clone();
-        sorted_programs.sort_by(|a, b| a.0.cmp(&b.0));
-
-        let spans = sorted_programs.iter()
-            .map(|&(addr, ref prog)| (addr, addr + prog.len()));
-
-        // verification step
-        for (i, (start, end)) in spans.enumerate() {
-            // check program length
-            let program_length = end - start;
-            if program_length >= self.max_length {
-                return Err(BuilderError::ProgramTooLong)
-            }
-
-            let program_distance = 100000; // FIXME: this is a cludge
-            if program_distance <= self.min_distance {
-                return Err(BuilderError::InvalidOffset)
-            }
-
-        }
-
-        // Load programs and check if all programs have enough distance 
-        // between them
-        for (pid, &(start, ref program)) in sorted_programs.iter().enumerate() {
-
-            // copy program into memory
-            for i in 0..program.len() {
-                mem[(i + start) % self.core_size] = program[i];
-            }
-
-            // add program to global process queue
-            let mut local_q = VecDeque::new();
-            local_q.push_back(start);
-            process_q.push_back((pid, local_q));
-            
-            // create pspace using the PID as the key
-            let local_pspace = vec![Instruction::default(); self.pspace_size];
-            pspace.insert(pid, local_pspace);
-        }
-
-        Ok(Core {
-            memory:        mem,
-            last_pid:      None,
-            version:       self.version,
-            max_processes: self.max_processes,
-            max_cycles:    self.max_cycles,
-            process_queue: process_q,
-            pspace:        pspace
-        })
-    }
-
-    /// Size of memory
-    ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    ///
-    /// let core = CoreBuilder::new()
-    ///     .core_size(80)
-    ///     .load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(core.size(), 80);
-    /// ```
-    ///
-    /// # Arguments
-    /// * `size`: size of memory
-    ///
-    /// # Return
-    /// `Self`
-    pub fn core_size(&mut self, size: usize) -> &Self
-    {
-        self.core_size = size;
-        self
-    }
-
-    /// Size of each warrior's P-space
-    ///
-    /// # Examples
-    /// TODO
-    ///
-    /// # Arguments
-    /// * `size`: size of memory
-    ///
-    /// # Return
-    /// `Self`
-    pub fn pspace_size(&mut self, size: usize) -> &Self
-    {
-        self.pspace_size = size;
-        self
-    }
-
-    /// Maximum number of cycles that can elapse before a tie is declared
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    ///
-    /// let core = CoreBuilder::new()
-    ///     .max_cycles(100)
-    ///     .load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(100, core.max_cycles());
-    /// ```
-    ///
-    /// # Arguments
-    /// * `n`: number of cycles
-    ///
-    /// # Return
-    /// `Self` 
-    pub fn max_cycles(&mut self, n: usize) -> &Self
-    {
-        self.max_cycles = n;
-        self
-    }
-
-    /// Maximum number of processes a core can have in it's process queue
-    ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    /// let core = CoreBuilder::new()
-    ///     .max_processes(10)
-    ///     .load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(10, core.max_processes());
-    /// ```
-    ///
-    /// # Arguments
-    /// * `n`: number of processes
-    ///
-    /// # Return
-    /// `Self`
-    pub fn max_processes(&mut self, n: usize) -> &Self
-    {
-        self.max_processes = n;
-        self
-    }
-
-    /// Maximum number of instructions allowed in a program
-    ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::{
-    ///     CoreBuilder,
-    ///     BuilderError,
-    ///     };
-    ///
-    /// use libcw::redcode::{OpMode, OpCode, AddressingMode, Instruction};
-    ///
-    /// let ins = Instruction::default();
-    /// 
-    /// let core = CoreBuilder::new()
-    ///     .max_length(100)
-    ///     .load(vec![(0, vec![ins; 101])]);
-    ///
-    /// assert_eq!(Err(BuilderError::ProgramTooLong), core);
-    /// ```
-    ///
-    /// # Arguments
-    /// * `n`: number of instructions
-    ///
-    /// # Return
-    /// `Self`
-    pub fn max_length(&mut self, n: usize) -> &Self
-    {
-        self.max_length = n;
-        self
-    }
-
-    /// Minimum distance between warriors
-    ///
-    /// # Arguments
-    /// * `n`: number of instructions
-    ///
-    /// # Return
-    /// `Self`
-    pub fn min_distance(&mut self, n: usize) -> &Self
-    {
-        self.min_distance = n;
-        self
-    }
-
-    /// Core version multiplied by 100 (e.g. version 0.8 -> 80)
-    ///
-    /// # Arguments
-    /// * `version`: version number
-    ///
-    /// # Return
-    /// `Self`
-    pub fn version(&mut self, version: usize) -> &Self
-    {
-        self.version = version;
-        self
     }
 }
 

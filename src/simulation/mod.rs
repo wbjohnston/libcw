@@ -3,13 +3,15 @@
 mod core;
 pub use self::core::{
     Core,
-    CoreBuilder,
-    BuilderError,
+    CoreEvent,
+    CoreError,
+    CoreResult
 };
 
-mod error;
-pub use self::error::Error;
+mod builder;
+pub use self::builder::{
+    CoreBuilder,
+    BuilderError
+};
 
-mod event;
-pub use self::event::Event;
 

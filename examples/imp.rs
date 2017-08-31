@@ -1,16 +1,8 @@
 /// A core running the imp program
 
 extern crate libcw;
-use libcw::redcode::{
-    Instruction,
-    OpCode,
-    OpMode,
-    AddressingMode,
-    OpField,
-    Field
-    };
-use libcw::simulation::{Core, CoreBuilder, Event};
-
+use libcw::redcode::*;
+use libcw::simulation::*;
 
 fn main()
 {
@@ -42,7 +34,7 @@ fn main()
         println!("{:?}", core);
         println!("END STEP {}", i);
 
-        if sim_result == Ok(Event::Finished) {
+        if sim_result == Ok(CoreEvent::Finished) {
             break;
         }
     }
