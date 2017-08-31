@@ -1,7 +1,11 @@
 //! Datastructures and functions for building and simulating a redcode core
 
 mod core;
-pub use self::core::{Core, CoreBuilder};
+pub use self::core::{
+    Core,
+    CoreBuilder,
+    BuilderError,
+};
 
 mod error;
 pub use self::error::Error;

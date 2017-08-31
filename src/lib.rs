@@ -1,6 +1,4 @@
-//! Core wars library
-//!
-//! TODO: longform
+//! Your one-stop shop for everything Core Wars
 
 pub mod redcode;
 

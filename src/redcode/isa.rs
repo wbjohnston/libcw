@@ -103,8 +103,6 @@ pub enum OpMode
 }
 
 /// Field Addressing mode: controls how the `offset` behaves
-///
-/// TODO: examples
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddressingMode
 {
@@ -160,11 +158,11 @@ pub enum AddressingMode
 pub struct Instruction
 {
     // FIXME: I don't like these public fields
-    pub op: OpCode,
-    pub mode: OpMode,
-    pub a:  Address,
+    pub op:     OpCode,
+    pub mode:   OpMode,
+    pub a:      Offset,
     pub a_mode: AddressingMode,
-    pub b:  Address,
+    pub b:      Offset,
     pub b_mode: AddressingMode,
 }
 

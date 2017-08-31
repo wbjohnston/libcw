@@ -4,8 +4,10 @@ use std::collections::{VecDeque, HashMap};
 
 use redcode::*;
 
-use simulation::Event;
-use simulation::Error;
+use simulation::{Event, Error};
+
+/// Process ID
+pub type PID = usize;
 
 pub type CoreResult<T> = Result<T, Error>;
 
@@ -34,20 +36,23 @@ const DEFAULT_INSTRUCTION: Instruction = Instruction {
 //      need to think about to how organize it. Maybe pass the process queue
 //      as a parameter
 /// Core wars Core
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Core
 {
     /// Core memory
     memory:        Vec<Instruction>,
 
     /// Current process id being run
-    active_pid:    usize,
+    last_pid:    Option<PID>,
 
     /// Maximum of processes that can be on the process queue at any time
     max_processes: usize,
 
+    /// Maximum number of cycles that can pass before a tie is declared
+    max_cycles:    usize,
+
     /// Program counter for each process currently loaded into memory
-    process_queue: VecDeque<(usize, VecDeque<usize>)>,
+    process_queue: VecDeque<(PID, VecDeque<usize>)>,
 
     /// Private storage space for warriors
     pspace:        HashMap<usize, Vec<Instruction>>,
@@ -65,34 +70,32 @@ impl Core
         // FIXME: this is written pretty badly
         // get active process counter
         if let Some((pid, mut q)) = self.process_queue.pop_back() {
-            self.active_pid = pid;
+            self.last_pid = Some(pid);
             let pc = q.pop_back().unwrap(); 
 
             // fetch phase
             let i = self.fetch(pc);
 
-            // TODO: Predecrement phase
-
             // execution phase
             let exec_event = match i.op {
                 OpCode::Dat => self.exec_dat(),
-                OpCode::Mov => self.exec_mov(&i),
-                OpCode::Add => self.exec_add(&i),
-                OpCode::Sub => self.exec_sub(&i),
-                OpCode::Mul => self.exec_mul(&i),
-                OpCode::Div => self.exec_div(&i),
-                OpCode::Mod => self.exec_mod(&i),
-                OpCode::Jmp => self.exec_jmp(&i),
-                OpCode::Jmz => self.exec_jmz(&i),
-                OpCode::Jmn => self.exec_jmn(&i),
-                OpCode::Djn => self.exec_djn(&i),
-                OpCode::Spl => self.exec_spl(&i),
-                OpCode::Cmp => self.exec_cmp(&i),
-                OpCode::Seq => self.exec_seq(&i),
-                OpCode::Sne => self.exec_sne(&i),
-                OpCode::Slt => self.exec_slt(&i),
-                OpCode::Ldp => self.exec_ldp(&i),
-                OpCode::Stp => self.exec_stp(&i),
+                OpCode::Mov => self.exec_mov(i, pc),
+                OpCode::Add => self.exec_add(),
+                OpCode::Sub => self.exec_sub(),
+                OpCode::Mul => self.exec_mul(),
+                OpCode::Div => self.exec_div(),
+                OpCode::Mod => self.exec_mod(),
+                OpCode::Jmp => self.exec_jmp(),
+                OpCode::Jmz => self.exec_jmz(),
+                OpCode::Jmn => self.exec_jmn(),
+                OpCode::Djn => self.exec_djn(),
+                OpCode::Spl => self.exec_spl(),
+                OpCode::Cmp => self.exec_cmp(),
+                OpCode::Seq => self.exec_seq(),
+                OpCode::Sne => self.exec_sne(),
+                OpCode::Slt => self.exec_slt(),
+                OpCode::Ldp => self.exec_ldp(),
+                OpCode::Stp => self.exec_stp(),
                 OpCode::Nop => self.exec_nop(),
             }?;
 
@@ -108,6 +111,29 @@ impl Core
         }
     }
 
+    /// Size of memory
+    pub fn size(&self) -> usize
+    {
+        self.memory.len()
+    }
+
+    /// Version of core multiplied by `100`
+    pub fn version(&self) -> usize
+    {
+        self.version
+    }
+
+    /// Maximum number of processes that can be in the core queue
+    pub fn max_processes(&self) -> usize
+    {
+        self.max_processes
+    }
+
+    pub fn max_cycles(&self) -> usize
+    {
+        self.max_cycles
+    }
+
     /// Fetch `Instruction` at target address
     ///
     /// # Arguments
@@ -115,11 +141,9 @@ impl Core
     ///
     /// # Return
     /// `Instruction` at `addr`
-    fn fetch(&self, addr: usize) -> Instruction
+    fn fetch(&self, addr: Address) -> Instruction
     {
-        let msize = self.memory.len();
-
-        self.memory[addr % msize]
+        self.memory[self.calc_addr(addr, 0)]
     }
 
     /// Fetch an mutable reference to target `Instruction`
@@ -129,10 +153,10 @@ impl Core
     ///
     /// # Return
     /// mutable reference to `Instruction` at `addr`
-    fn fetch_mut(&mut self, addr: usize) -> &mut Instruction
+    fn fetch_mut(&mut self, addr: Address) -> &mut Instruction
     {
-        let msize = self.memory.len();
-        &mut self.memory[addr % msize]
+        let addr = self.calc_addr(addr, 0);
+        &mut self.memory[addr]
     }
 
     /// Calculate an address considering that address calculation is done 
@@ -143,26 +167,43 @@ impl Core
     ///
     /// # Return
     /// address plus offset modulo core size
-    fn calc_addr(&self, addr: usize, offset: isize) -> usize
+    fn calc_addr(&self, addr: Address, offset: Offset) 
+        -> Address
     {
-        let is_negative = offset < 0;
-        let offset = -offset as usize;
-        let msize = self.memory.len();
-        
-        if is_negative {
-            // lower bound check    
-            if addr < offset {
-                msize - (offset - addr)
-            } else {
-                addr - offset
-            }
-        } else {
-            // upper bound check
-            if addr + offset > msize {
-                msize - addr + offset
-            } else {
-                addr + offset
-            }
+        unimplemented!();
+    }
+
+    fn calc_target_addr(&self, 
+        addr: Address,
+        offset: Offset,
+        mode: AddressingMode
+        ) 
+        -> Address
+    {
+        // calculate first so we don't have to do multiple function calls
+        let direct_addr = self.calc_addr(addr, offset);
+
+        match mode {
+            AddressingMode::Direct => direct_addr,
+
+            AddressingMode::AIndirect |
+                AddressingMode::AIndirectPreDecrement |
+                AddressingMode::AIndirectPostIncrement => 
+            {
+                let indirect_offset = self.fetch(direct_addr).a;    
+
+                self.calc_addr(direct_addr, indirect_offset)
+            },
+
+            AddressingMode::BIndirect |
+                AddressingMode::BIndirectPreDecrement |
+                AddressingMode::BIndirectPostIncrement =>
+            {
+                let indirect_offset = self.fetch(direct_addr).b;    
+                self.calc_addr(direct_addr, indirect_offset)
+            },
+
+            AddressingMode::Immediate => panic!("This should never happen!")
         }
     }
 
@@ -173,208 +214,178 @@ impl Core
     fn exec_dat(&mut self) 
         -> CoreResult<Event>
     {
-        Ok(Event::Terminated(self.active_pid()))
+        // we can unwrap this because my the time any exec functions have been
+        // called, a pid has been loaded into the `last_pid` field
+        Ok(Event::Terminated(self.last_pid.unwrap()))
     }
 
     /// Execute `mov` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_mov(&mut self, i: &Instruction)
+    fn exec_mov(&mut self, i: Instruction, pc: Address)
         -> CoreResult<Event>
     {
-        unimplemented!();
+        let source_addr = self.calc_target_addr(pc, i.a, i.a_mode);
+        let target_addr = self.calc_target_addr(pc, i.b, i.b_mode);
+
+        let source = self.fetch(source_addr);
+        let target = self.fetch_mut(target_addr);
+
+        match i.mode {
+            // A -> A
+            OpMode::A  => {
+                target.a      = source.a;
+                target.a_mode = source.a_mode;
+            }
+            // B -> B
+            OpMode::B  => {
+                target.b      = source.b;
+                target.b_mode = source.b_mode;
+            }
+            // A -> B
+            OpMode::AB => {
+                target.b      = source.a;
+                target.b_mode = source.a_mode;
+            }
+            // B -> A
+            OpMode::BA => {
+                target.a      = source.b;
+                target.a_mode = source.b_mode;
+            }
+            // A -> B, B -> A
+            OpMode::X  => {
+                target.b      = source.a;
+                target.b_mode = source.a_mode;
+            
+                target.a      = source.b;
+                target.a_mode = source.b_mode;
+            }
+            // A -> A, B -> B
+            OpMode::F  => {
+                target.a      = source.a;
+                target.a_mode = source.a_mode;
+            
+                target.b      = source.b;
+                target.b_mode = source.b_mode;
+            }
+            // Whole instruction
+            OpMode::I  => {
+                *target = source;
+            }
+        };
+
+        Ok(Event::None)
     }
 
     /// Execute `add` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_add(&mut self, i: &Instruction)
+    fn exec_add(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `sub` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_sub(&mut self, i: &Instruction)
+    fn exec_sub(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `mul` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_mul(&mut self, i: &Instruction)
+    fn exec_mul(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `div` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_div(&mut self, i: &Instruction)
+    fn exec_div(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `mod` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_mod(&mut self, i: &Instruction)
+    fn exec_mod(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `jmp` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_jmp(&mut self, i: &Instruction)
+    fn exec_jmp(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `jmz` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_jmz(&mut self, i: &Instruction)
+    fn exec_jmz(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `jmn` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_jmn(&mut self, i: &Instruction)
+    fn exec_jmn(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `djn` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_djn(&mut self, i: &Instruction)
+    fn exec_djn(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `spl` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_spl(&mut self, i: &Instruction)
+    fn exec_spl(&mut self)
         -> CoreResult<Event>
     {
-        unimplemented!();
+        if self.process_count() >= self.max_processes {
+            Ok(Event::Split(0)) // TODO: nah
+        } else {
+            Ok(Event::None)
+        }
     }
 
     /// Execute `cmp` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_cmp(&mut self, i: &Instruction)
+    fn exec_cmp(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `seq` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_seq(&mut self, i: &Instruction)
+    fn exec_seq(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `sne` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_sne(&mut self, i: &Instruction)
+    fn exec_sne(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `slt` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_slt(&mut self, i: &Instruction)
+    fn exec_slt(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `ldp` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_ldp(&mut self, i: &Instruction)
+    fn exec_ldp(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
     }
 
     /// Execute `stp` instruction
-    ///
-    /// # Arguments
-    /// * `mode`: Mode to execute instruction in
-    /// * `a`: A `Field` of the `Instruction`
-    /// * `b`: B `Field` of the `Instruction`
-    fn exec_stp(&mut self, i: &Instruction)
+    fn exec_stp(&mut self)
         -> CoreResult<Event>
     {
         unimplemented!();
@@ -397,11 +408,11 @@ impl Core
         &self.memory
     }
 
-    /// Get the current process id being run
+    /// Get the last process id run
     #[inline]
-    pub fn active_pid(&self) -> usize
+    pub fn last_pid(&self) -> Option<PID>
     {
-        self.active_pid
+        self.last_pid
     }
 
     /// The number of programs currently loaded into memory
@@ -475,7 +486,38 @@ impl CoreBuilder
     }
 
     /// Load programs into memory and build a `Core`
-    pub fn load(&self, programs: Vec<(usize, Program)>) 
+    /// 
+    /// # Examples
+    /// ```
+    /// use libcw::simulation::*;
+    /// use libcw::redcode::*;
+    ///
+    /// // Build program
+    /// let ins = Instruction{
+    ///         op: OpCode::Mov,
+    ///         mode: OpMode::I,
+    ///         a: 0,
+    ///         a_mode: AddressingMode::Direct,
+    ///         b: 1,
+    ///         b_mode: AddressingMode::Direct
+    ///     };
+    ///
+    /// let program = vec![ins; 10];
+    ///
+    /// let starting_address = 100; // program will be loaded at this addr
+    /// let core = CoreBuilder::new()
+    ///     .load(vec![(starting_address, program.clone())])
+    ///     .unwrap();
+    ///
+    ///let (start, end) = (starting_address, starting_address + program.len());
+    ///
+    /// assert_eq!(
+    ///     core.memory().as_slice()[start..end],
+    ///     program.as_slice()
+    /// );
+    /// 
+    /// ```
+    pub fn load(&self, programs: Vec<(Address, Program)>) 
         -> Result<Core, BuilderError>
     {
         // FIXME: this function is shit mania dot com
@@ -500,64 +542,67 @@ impl CoreBuilder
         let mut sorted_programs = programs.clone();
         sorted_programs.sort_by(|a, b| a.0.cmp(&b.0));
 
-        // Check that all programs are a valid length
-        let programs_length_valid = sorted_programs.iter()
-            .fold(true, |acc, &(_, ref x)| acc && x.len() < self.max_length);
+        let spans = sorted_programs.iter()
+            .map(|&(addr, ref prog)| (addr, addr + prog.len()));
 
-        if !programs_length_valid {
-            return Err(BuilderError::ProgramTooLong);
-        }
+        // verification step
+        for (i, (start, end)) in spans.enumerate() {
+            // check program length
+            let program_length = end - start;
+            if program_length >= self.max_length {
+                return Err(BuilderError::ProgramTooLong)
+            }
 
-        // Check if any programs are out of bounds of 
-        // FIXME: this is ugly af
-        let programs_are_inbound = {
-            let ref last = sorted_programs[sorted_programs.len() - 1];
-            let terminal_address = last.0 + last.1.len();
-            terminal_address < self.core_size
-        };
+            let program_distance = 100000; // FIXME: this is a cludge
+            if program_distance <= self.min_distance {
+                return Err(BuilderError::InvalidOffset)
+            }
 
-        if !programs_are_inbound {
-            return Err(BuilderError::InvalidOffset);
         }
 
         // Load programs and check if all programs have enough distance 
         // between them
-        let mut spans: Vec<(usize, usize)> = vec![];
-        for (i, &(offset, ref program)) in sorted_programs.iter().enumerate() {
-            // check margin
-            if !spans.is_empty() && spans[i - 1].1 - offset < self.min_distance {
-                return Err(BuilderError::InvalidOffset);
-            }
+        for (pid, &(start, ref program)) in sorted_programs.iter().enumerate() {
 
             // copy program into memory
-            for i in 0..programs.len() {
-                mem[(i + offset) % self.core_size] = program[i];
+            for i in 0..program.len() {
+                mem[(i + start) % self.core_size] = program[i];
             }
 
             // add program to global process queue
             let mut local_q = VecDeque::new();
-            local_q.push_back(offset);
-            process_q.push_back((i, local_q));
+            local_q.push_back(start);
+            process_q.push_back((pid, local_q));
             
             // create pspace using the PID as the key
             let local_pspace = vec![DEFAULT_INSTRUCTION; self.pspace_size];
-            pspace.insert(i, local_pspace);
-
-            spans.push((offset, offset + programs.len()));
-            // TODO: check wrap around distance
+            pspace.insert(pid, local_pspace);
         }
 
         Ok(Core {
             memory:        mem,
-            active_pid:    0,
+            last_pid:      None,
             version:       self.version,
             max_processes: self.max_processes,
+            max_cycles:    self.max_cycles,
             process_queue: process_q,
             pspace:        pspace
         })
     }
 
     /// Size of memory
+    ///
+    /// # Examples
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    ///
+    /// let core = CoreBuilder::new()
+    ///     .core_size(80)
+    ///     .load(vec![])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(core.size(), 80);
+    /// ```
     ///
     /// # Arguments
     /// * `size`: size of memory
@@ -572,6 +617,9 @@ impl CoreBuilder
 
     /// Size of each warrior's P-space
     ///
+    /// # Examples
+    /// TODO
+    ///
     /// # Arguments
     /// * `size`: size of memory
     ///
@@ -584,6 +632,19 @@ impl CoreBuilder
     }
 
     /// Maximum number of cycles that can elapse before a tie is declared
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    ///
+    /// let core = CoreBuilder::new()
+    ///     .max_cycles(100)
+    ///     .load(vec![])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(100, core.max_cycles());
+    /// ```
     ///
     /// # Arguments
     /// * `n`: number of cycles
@@ -598,6 +659,17 @@ impl CoreBuilder
 
     /// Maximum number of processes a core can have in it's process queue
     ///
+    /// # Examples
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    /// let core = CoreBuilder::new()
+    ///     .max_processes(10)
+    ///     .load(vec![])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(10, core.max_processes());
+    /// ```
+    ///
     /// # Arguments
     /// * `n`: number of processes
     ///
@@ -610,6 +682,31 @@ impl CoreBuilder
     }
 
     /// Maximum number of instructions allowed in a program
+    ///
+    /// # Examples
+    /// ```
+    /// use libcw::simulation::{
+    ///     CoreBuilder,
+    ///     BuilderError,
+    ///     };
+    ///
+    /// use libcw::redcode::{OpMode, OpCode, AddressingMode, Instruction};
+    ///
+    /// let ins = Instruction{
+    ///     op: OpCode::Dat,
+    ///     mode: OpMode::I,
+    ///     a: 0,
+    ///     a_mode: AddressingMode::Direct,
+    ///     b: 0,
+    ///     b_mode: AddressingMode::Direct
+    ///     };
+    /// 
+    /// let core = CoreBuilder::new()
+    ///     .max_length(100)
+    ///     .load(vec![(0, vec![ins; 101])]);
+    ///
+    /// assert_eq!(Err(BuilderError::ProgramTooLong), core);
+    /// ```
     ///
     /// # Arguments
     /// * `n`: number of instructions
@@ -636,8 +733,10 @@ impl CoreBuilder
     }
 
     /// Core version multiplied by 100 (e.g. version 0.8 -> 80)
+    ///
     /// # Arguments
     /// * `version`: version number
+    ///
     /// # Return
     /// `Self`
     pub fn version(&mut self, version: usize) -> &Self
