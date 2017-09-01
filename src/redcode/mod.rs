@@ -3,11 +3,11 @@
 /// Alias for a program, which is just a list of instructions
 pub type Program = Vec<Instruction>;
 
+/// Address in a core
+pub type Address = usize;
+
 /// Offset to an `Address`
 pub type Offset = isize;
-
-mod address;
-pub use self::address::Address;
 
 mod op_code;
 pub use self::op_code::OpCode;

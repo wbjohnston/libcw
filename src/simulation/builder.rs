@@ -2,7 +2,7 @@
 
 use std::collections::{VecDeque, HashMap};
 
-use redcode::{Instruction, Address, Program};
+use redcode::{Instruction, Program};
 use simulation::Core;
 
 // Core defaults
@@ -106,7 +106,7 @@ impl CoreBuilder
     /// );
     /// 
     /// ```
-    pub fn load(&self, programs: Vec<(Address, Program)>) 
+    pub fn load(&self, programs: Vec<(usize, Program)>) 
         -> Result<Core, BuilderError>
     {
         // FIXME: this function is shit mania dot com
@@ -132,7 +132,7 @@ impl CoreBuilder
         sorted_programs.sort_by(|a, b| a.0.cmp(&b.0));
 
         let spans = sorted_programs.iter()
-            .map(|&(addr, ref prog)| (addr, addr + prog.len()));
+            .map(|&(addr, ref prog)| (usize::from(addr), usize::from(addr) + prog.len()));
 
         // verification step
         for (i, (start, end)) in spans.enumerate() {
@@ -155,7 +155,7 @@ impl CoreBuilder
 
             // copy program into memory
             for i in 0..program.len() {
-                mem[(i + start) % self.core_size] = program[i];
+                mem[(i + usize::from(start)) % self.core_size] = program[i];
             }
 
             // add program to global process queue

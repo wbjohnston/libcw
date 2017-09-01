@@ -2,6 +2,7 @@
 
 // TODO: add functions for hot-loading proceses
 // TODO: implement `Core::exec_stp` and `Core::exec_ldp` functions
+// TODO: implement p-space PIN's
 
 use std::collections::{VecDeque, HashMap};
 use std::fmt;
@@ -64,7 +65,6 @@ impl Error for CoreError
     }
 }
 
-
 /// Core wars runtime
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Core
@@ -73,7 +73,7 @@ pub struct Core
     pub(super) memory:        Vec<Instruction>,
 
     /// Current process id being run
-    pub(super) last_pid:    Option<PID>,
+    pub(super) last_pid:      Option<PID>,
 
     /// Maximum of processes that can be on the process queue at any time
     pub(super) max_processes: usize,
@@ -82,7 +82,7 @@ pub struct Core
     pub(super) max_cycles:    usize,
 
     /// Program counter for each process currently loaded into memory
-    pub(super) process_queue: VecDeque<(PID, VecDeque<usize>)>,
+    pub(super) process_queue: VecDeque<(PID, VecDeque<Address>)>,
 
     /// Private storage space for warriors
     pub(super) pspace:        HashMap<usize, Vec<Instruction>>,
@@ -93,6 +93,8 @@ pub struct Core
 
 impl Core
 {
+    // TODO: Determine if `exec_*(src: &Instruction, trg: &mut Instruction)`
+    // is a bad API
     /// Step forward one cycle
     pub fn step(&mut self)
         -> CoreResult<CoreEvent>
@@ -103,30 +105,88 @@ impl Core
             self.last_pid = Some(pid);
             let pc = q.pop_back().unwrap(); 
 
-            // fetch phase
-            let i = self.fetch(pc);
+            let i = self.fetch(pc).clone();
+            let src_addr = self.calc_target_addr(pc, i.a);
+            let trg_addr = self.calc_target_addr(pc, i.b);
+            let (code, mode) = (i.op.code, i.op.mode);
+
+            // FIXME: fix borrow checker, need to use `split_at_mut(usize)`
+            // to get two mutable slices of the memory buffer
+            let src = &self.fetch(src_addr).clone();
+            let trg = self.fetch_mut(trg_addr);
 
             // execution phase
-            let exec_event = match i.op.code {
-                OpCode::Dat => self.exec_dat(),
-                OpCode::Mov => self.exec_mov(i, pc),
-                OpCode::Add => self.exec_add(i, pc),
-                OpCode::Sub => self.exec_sub(i, pc),
-                OpCode::Mul => self.exec_mul(i, pc),
-                OpCode::Div => self.exec_div(i, pc),
-                OpCode::Mod => self.exec_mod(i, pc),
-                OpCode::Jmp => self.exec_jmp(i, pc),
-                OpCode::Jmz => self.exec_jmz(i, pc),
-                OpCode::Jmn => self.exec_jmn(i, pc),
-                OpCode::Djn => self.exec_djn(i, pc),
-                OpCode::Spl => self.exec_spl(i, pc),
-                OpCode::Cmp => self.exec_cmp(i, pc),
-                OpCode::Seq => self.exec_seq(i, pc),
-                OpCode::Sne => self.exec_sne(i, pc),
-                OpCode::Slt => self.exec_slt(i, pc),
-                OpCode::Ldp => self.exec_ldp(i, pc),
-                OpCode::Stp => self.exec_stp(i, pc),
-                OpCode::Nop => self.exec_nop(pc),
+            let exec_event = match code {
+                OpCode::Dat => Ok(CoreEvent::Terminated(pid)),
+                OpCode::Mov => {
+                    Self::exec_mov(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }, 
+                OpCode::Add => {
+                    Self::exec_add(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Sub => {
+                    Self::exec_sub(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Mul => {
+                    Self::exec_mul(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Div => {
+                    Self::exec_div(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Mod => {
+                    Self::exec_mod(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Jmp => {
+                    Self::exec_jmp(mode, src);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Jmz => {
+                    Self::exec_jmz(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Jmn => {
+                    Self::exec_jmn(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Djn => {
+                    Self::exec_djn(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Spl => {
+                    Self::exec_spl(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                },
+                OpCode::Cmp => {
+                    Self::exec_cmp(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Seq => {
+                    Self::exec_seq(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                },
+                OpCode::Sne => {
+                    Self::exec_sne(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                },
+                OpCode::Slt => {
+                    Self::exec_slt(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Ldp => {
+                    Self::exec_ldp(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Stp => {
+                    Self::exec_stp(mode, src, trg);
+                    Ok(CoreEvent::Stepped(pc + 1))
+                }
+                OpCode::Nop => Ok(CoreEvent::Stepped(pc + 1)),
             }?;
 
             // requeue process queue if there are still threads
@@ -171,500 +231,17 @@ impl Core
         self.max_processes
     }
 
+    /// Maximum number of cycles before a tie is declared
     pub fn max_cycles(&self) -> usize
     {
         self.max_cycles
     }
 
-    /// Fetch `Instruction` at target address
-    ///
-    /// # Arguments
-    /// `addr`: address of `Instruction` to fetch
-    ///
-    /// # Return
-    /// `Instruction` at `addr`
-    fn fetch(&self, addr: Address) -> Instruction
-    {
-        self.memory[self.calc_addr(addr, 0)]
-    }
-
-    /// Fetch an mutable reference to target `Instruction`
-    ///
-    /// # Arguments
-    /// * `addr`: address of `Instruction` to fetch
-    ///
-    /// # Return
-    /// mutable reference to `Instruction` at `addr`
-    fn fetch_mut(&mut self, addr: Address) -> &mut Instruction
-    {
-        let addr = self.calc_addr(addr, 0);
-        &mut self.memory[addr]
-    }
-
-    /// Calculate an address considering that address calculation is done 
-    /// modulo size of core
-    ///
-    /// # Arguments
-    /// * `addr`: base address
-    ///
-    /// # Return
-    /// address plus offset modulo core size
-    fn calc_addr(&self, addr: Address, offset: Offset) 
-        -> Address
-    {
-        unimplemented!();
-    }
-
-    // TODO: this should just take in a `Field` instead of an `Offset` and
-    // `Mode`
-    fn calc_target_addr(&self, 
-        addr: Address,
-        offset: Offset,
-        mode: AddressingMode
-        ) 
-        -> Address
-    {
-        // calculate first so we don't have to do multiple function calls
-        let direct_addr = self.calc_addr(addr, offset);
-
-        match mode {
-            AddressingMode::Direct => direct_addr,
-
-            AddressingMode::AIndirect
-                | AddressingMode::AIndirectPreDecrement
-                | AddressingMode::AIndirectPostIncrement => {
-                let indirect_offset = self.fetch(direct_addr).a.offset;    
-
-                self.calc_addr(direct_addr, indirect_offset)
-            },
-            AddressingMode::BIndirect 
-                | AddressingMode::BIndirectPreDecrement
-                | AddressingMode::BIndirectPostIncrement =>
-            {
-                let indirect_offset = self.fetch(direct_addr).b.offset;    
-                self.calc_addr(direct_addr, indirect_offset)
-            },
-            AddressingMode::Immediate => panic!("This should never happen!")
-        }
-    }
-
-    /////////////
-    // Instruction Execution functions
-    /////////////
-    /// Execute `dat` instruction
-    ///
-    /// Supported OpModes: None
-    fn exec_dat(&mut self) 
-        -> CoreResult<CoreEvent>
-    {
-        // we can unwrap this because my the time any exec functions have been
-        // called, a pid has been loaded into the `last_pid` field
-        Ok(CoreEvent::Terminated(self.last_pid.unwrap()))
-    }
-
-    /// Execute `mov` instruction
-    /// 
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_mov(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch_mut(target_addr);
-
-        match i.op.mode {
-            // A -> A
-            OpMode::A  => target.a = source.a,
-            // B -> B
-            OpMode::B  => target.b = source.b,
-            // A -> B
-            OpMode::AB => target.b = source.a,
-            // B -> A
-            OpMode::BA => target.a = source.b,
-            // A -> B, B -> A
-            OpMode::X  => {
-                target.b      = source.a;
-                target.a      = source.b;
-            }
-            // A -> A, B -> B
-            OpMode::F  => {
-                target.a      = source.a;
-                target.b      = source.b;
-            }
-            // Whole instruction
-            OpMode::I  => *target = source,
-        };
-
-        Ok(CoreEvent::Stepped(pc + 1))
-    }
-
-    /// Execute `add` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_add(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch_mut(target_addr);
-
-        match i.op.mode {
-            OpMode::A  => target.a.offset += source.a.offset,
-            OpMode::B  => target.b.offset += source.b.offset,
-            OpMode::AB => target.b.offset += source.a.offset,
-            OpMode::BA => target.a.offset += source.b.offset,
-            OpMode::X  => {
-                target.a.offset += source.b.offset;
-                target.b.offset += source.a.offset;
-            }
-            OpMode::F
-                | OpMode::I => {
-                target.a.offset += source.a.offset;
-                target.b.offset += source.b.offset;
-            }
-        }
-
-        Ok(CoreEvent::Stepped(pc + 1))
-    }
-
-    /// Execute `sub` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_sub(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch_mut(target_addr);
-
-        match i.op.mode {
-            OpMode::A  => target.a.offset += source.a.offset,
-            OpMode::B  => target.b.offset += source.b.offset,
-            OpMode::AB => target.b.offset += source.a.offset,
-            OpMode::BA => target.a.offset += source.b.offset,
-            OpMode::X  => {
-                target.a.offset += source.b.offset;
-                target.b.offset += source.a.offset;
-            }
-            OpMode::F
-                | OpMode::I => {
-                target.a.offset += source.a.offset;
-                target.b.offset += source.b.offset;
-            }
-        }
-        
-        Ok(CoreEvent::Stepped(pc + 1))
-    }
-
-    /// Execute `mul` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mul(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch_mut(target_addr);
-
-        match i.op.mode {
-            OpMode::A  => target.a.offset *= source.a.offset,
-            OpMode::B  => target.b.offset *= source.b.offset,
-            OpMode::AB => target.b.offset *= source.a.offset,
-            OpMode::BA => target.a.offset *= source.b.offset,
-            OpMode::X  => {
-                target.a.offset *= source.b.offset;
-                target.b.offset *= source.a.offset;
-            }
-            OpMode::F
-                | OpMode::I => {
-                target.a.offset *= source.a.offset;
-                target.b.offset *= source.b.offset;
-            }
-        }
-        
-        Ok(CoreEvent::Stepped(pc + 1))
-    }
-
-    /// Execute `div` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_div(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch_mut(target_addr);
-
-        match i.op.mode {
-            OpMode::A  => target.a.offset /= source.a.offset,
-            OpMode::B  => target.b.offset /= source.b.offset,
-            OpMode::AB => target.b.offset /= source.a.offset,
-            OpMode::BA => target.a.offset /= source.b.offset,
-            OpMode::X  => {
-                target.a.offset /= source.b.offset;
-                target.b.offset /= source.a.offset;
-            }
-            OpMode::F
-                | OpMode::I => {
-                target.a.offset /= source.a.offset;
-                target.b.offset /= source.b.offset;
-            }
-        }
-        
-        Ok(CoreEvent::Stepped(pc + 1))
-    }
-
-    /// Execute `mod` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mod(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch_mut(target_addr);
-
-        match i.op.mode {
-            OpMode::A  => target.a.offset %= source.a.offset,
-            OpMode::B  => target.b.offset %= source.b.offset,
-            OpMode::AB => target.b.offset %= source.a.offset,
-            OpMode::BA => target.a.offset %= source.b.offset,
-            OpMode::X  => {
-                target.a.offset %= source.b.offset;
-                target.b.offset %= source.a.offset;
-            }
-            OpMode::F
-                | OpMode::I => {
-                target.a.offset %= source.a.offset;
-                target.b.offset %= source.b.offset;
-            }
-        }
-        
-        Ok(CoreEvent::Stepped(pc + 1))
-    }
-
-    /// Execute `jmp` instruction
-    ///
-    /// Supported OpModes: `B`
-    fn exec_jmp(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        Ok(CoreEvent::Jumped(target_addr))
-    }
-
-    /// Execute `jmz` instruction
-    ///
-    /// Supported OpModes: `B`
-    fn exec_jmz(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let target_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target = self.fetch(target_addr);
-
-        let should_jump = match i.op.mode {
-            OpMode::A 
-                | OpMode::BA => target.a.offset == 0,
-            OpMode::B 
-                | OpMode::AB => target.b.offset == 0,
-            OpMode::X 
-                | OpMode::F
-                | OpMode::I => target.a.offset == 0 && target.b.offset == 0
-        };
-
-        if should_jump {
-            Ok(CoreEvent::Jumped(target_addr)) 
-        } else {
-            Ok(CoreEvent::Stepped(pc + 1))
-        }
-    }
-
-    /// Execute `jmn` instruction
-    ///
-    /// Supported OpModes: `B`
-    fn exec_jmn(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        unimplemented!();
-    }
-
-    /// Execute `djn` instruction
-    ///
-    /// Supported OpModes: `B`
-    fn exec_djn(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        unimplemented!();
-    }
-
-    /// Execute `spl` instruction
-    ///
-    /// Supported OpModes: `B`
-    fn exec_spl(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        if self.process_count() < self.max_processes {
-            let target_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-
-            Ok(CoreEvent::Split(pc + 1, target_addr)) // TODO: placeholder
-        } else {
-            Ok(CoreEvent::Stepped(pc + 1))
-        }
-    }
-
-    /// Execute `cmp` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_cmp(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        self.exec_seq(i, pc)
-    }
-
-    /// Execute `seq` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_seq(&self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch(target_addr);
-        
-        // FIXME: this is definitively wrong, but I don't know the defined
-        // behavior
-        let should_jump = match i.op.mode {
-            OpMode::A  => source.a.offset == target.a.offset,
-            OpMode::B  => source.b.offset == target.b.offset,
-            OpMode::AB => source.a.offset == target.b.offset,
-            OpMode::BA => source.b.offset == target.a.offset,
-            OpMode::X 
-                | OpMode::F
-                | OpMode::I  => source.a.offset == target.a.offset && 
-                                source.b.offset == target.b.offset
-        };
-
-        if should_jump {
-            Ok(CoreEvent::Jumped(pc + 2))
-        } else {
-            Ok(CoreEvent::Stepped(pc + 1))
-        }
-    }
-
-    /// Execute `sne` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_sne(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch(target_addr);
-        
-        // FIXME: this is definitively wrong, but I don't know the defined
-        // behavior
-        let should_jump = match i.op.mode {
-            OpMode::A  => source.a.offset != target.a.offset,
-            OpMode::B  => source.b.offset != target.b.offset,
-            OpMode::AB => source.a.offset != target.b.offset,
-            OpMode::BA => source.b.offset != target.a.offset,
-            OpMode::X 
-                | OpMode::F
-                | OpMode::I  => source.a.offset != target.a.offset &&
-                                source.b.offset != target.b.offset,
-        };
-
-        if should_jump {
-            Ok(CoreEvent::Stepped(pc + 1))
-        } else {
-            Ok(CoreEvent::Stepped(pc + 1))
-        }
-    }
-
-    /// Execute `slt` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_slt(&self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        let source_addr = self.calc_target_addr(pc, i.a.offset, i.a.mode);
-        let target_addr = self.calc_target_addr(pc, i.b.offset, i.b.mode);
-
-        let source = self.fetch(source_addr);
-        let target = self.fetch(target_addr);
-        
-        // FIXME: this is definitively wrong, but I don't know the defined
-        // behavior
-        let should_jump = match i.op.mode {
-            OpMode::A  => source.a.offset < target.a.offset,
-            OpMode::B  => source.b.offset < target.b.offset,
-            OpMode::AB => source.a.offset < target.b.offset,
-            OpMode::BA => source.b.offset < target.a.offset,
-            OpMode::X 
-                | OpMode::F
-                | OpMode::I  => source.a.offset < target.a.offset &&
-                                source.b.offset < target.b.offset,
-        };
-
-        if should_jump {
-            Ok(CoreEvent::Jumped(pc + 1))
-        } else {
-            Ok(CoreEvent::Stepped(pc + 2))
-        }
-    }
-
-    /// Execute `ldp` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_ldp(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        unimplemented!();
-    }
-
-    /// Execute `stp` instruction
-    ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_stp(&mut self, i: Instruction, pc: Address)
-        -> CoreResult<CoreEvent>
-    {
-        unimplemented!();
-    }
-
-    /// Execute `nop` instruction
-    ///
-    /// Supported OpModes: None
-    fn exec_nop(&mut self, pc: Address) 
-        -> CoreResult<CoreEvent>
-    {
-        Ok(CoreEvent::Stepped(pc + 1))
-    }
-
-    /////////////
-    // Data accessors
-    /////////////
     /// Get immutable reference to memory
     #[inline]
-    pub fn memory(&self) -> &Vec<Instruction>
+    pub fn memory(&self) -> &[Instruction]
     {
-        &self.memory
+        &self.memory.as_slice()
     }
 
     /// Get the last process id run
@@ -688,5 +265,286 @@ impl Core
         // count length of all local process queues in the global pqueue
         self.process_queue.iter().fold(0, |acc, &(_, ref x)| acc + x.len())
     }
+
+    /// Fetch `Instruction` at target address
+    ///
+    /// # Arguments
+    /// `addr`: address of `Instruction` to fetch
+    fn fetch(&self, addr: Address) -> &Instruction
+    {
+        &self.memory[addr as usize]
+    }
+
+    /// Fetch an mutable reference to target `Instruction`
+    ///
+    /// # Arguments
+    /// * `addr`: address of `Instruction` to fetch
+    fn fetch_mut(&mut self, addr: Address) -> &mut Instruction
+    {
+        let addr = self.calc_addr(addr, 0);
+        &mut self.memory[addr as usize]
+    }
+
+    /// Calculate an address plus an offset taking core size into account
+    /// # Arguments
+    /// * `base`: base address
+    /// * `offst`: offset of base to calculate
+    #[inline]
+    fn calc_addr(&self, base: Address, offset: Offset) -> Address
+    {
+        unimplemented!("Need to handle underflow overflow within core bounds");
+    }
+
+    // TODO: this should just take in a `Field` instead of an `Offset` and
+    // `Mode`
+    /// TODO: docs
+    fn calc_target_addr(&self, addr: Address, field: Field) -> Address
+    {
+        unimplemented!("This probably doesn't work right now");
+        // calculate first so we don't have to do multiple function calls
+        // let direct_addr = self.calc_addr(addr, field.offset);
+
+        // match field.mode {
+        //     AddressingMode::Direct => direct_addr,
+        //     AddressingMode::AIndirect
+        //         | AddressingMode::AIndirectPreDecrement
+        //         | AddressingMode::AIndirectPostIncrement => {
+        //         let indirect_offset = self.fetch(direct_addr).a.offset;    
+
+        //         self.calc_addr(direct_addr, indirect_offset)
+        //     },
+        //     AddressingMode::BIndirect 
+        //         | AddressingMode::BIndirectPreDecrement
+        //         | AddressingMode::BIndirectPostIncrement =>
+        //     {
+        //         let indirect_offset = self.fetch(direct_addr).b.offset;    
+        //         self.calc_addr(direct_addr, indirect_offset)
+        //     },
+        //     AddressingMode::Immediate => unreachable!() 
+        // }
+    }
+
+    /// Execute `mov` instruction
+    /// 
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    fn exec_mov(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    {
+        match mode {
+            OpMode::A  => trg.a = src.a,
+            OpMode::B  => trg.b = src.b,
+            OpMode::AB => trg.b = src.a,
+            OpMode::BA => trg.a = src.b,
+            OpMode::X  => {
+                trg.b      = src.a;
+                trg.a      = src.b;
+            }
+            OpMode::F  => {
+                trg.a      = src.a;
+                trg.b      = src.b;
+            }
+            OpMode::I  => *trg = *src,
+        };
+    }
+
+    /// Execute `add` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    fn exec_add(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    {
+        match mode {
+            OpMode::A  => trg.a.offset += src.a.offset,
+            OpMode::B  => trg.b.offset += src.b.offset,
+            OpMode::AB => trg.b.offset += src.a.offset,
+            OpMode::BA => trg.a.offset += src.b.offset,
+            OpMode::X  => {
+                trg.b.offset += src.a.offset;
+                trg.a.offset += src.b.offset;
+            }
+            OpMode::I
+                | OpMode::F => {
+                trg.a.offset += src.a.offset;
+                trg.b.offset += src.b.offset;
+            }
+        };
+    }
+
+    /// Execute `sub` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    fn exec_sub(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    {
+        match mode {
+            OpMode::A  => trg.a.offset -= src.a.offset,
+            OpMode::B  => trg.b.offset -= src.b.offset,
+            OpMode::AB => trg.b.offset -= src.a.offset,
+            OpMode::BA => trg.a.offset -= src.b.offset,
+            OpMode::X  => {
+                trg.b.offset -= src.a.offset;
+                trg.a.offset -= src.b.offset;
+            }
+            OpMode::I
+                | OpMode::F => {
+                trg.a.offset -= src.a.offset;
+                trg.b.offset -= src.b.offset;
+            }
+        }
+    }
+
+    /// Execute `mul` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    fn exec_mul(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    {
+        match mode {
+            OpMode::A  => trg.a.offset *= src.a.offset,
+            OpMode::B  => trg.b.offset *= src.b.offset,
+            OpMode::AB => trg.b.offset *= src.a.offset,
+            OpMode::BA => trg.a.offset *= src.b.offset,
+            OpMode::X  => {
+                trg.b.offset *= src.a.offset;
+                trg.a.offset *= src.b.offset;
+            }
+            OpMode::I
+                | OpMode::F => {
+                trg.a.offset *= src.a.offset;
+                trg.b.offset *= src.b.offset;
+            }
+        }
+    }
+
+    /// Execute `div` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    fn exec_div(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    {
+        match mode {
+            OpMode::A  => trg.a.offset /= src.a.offset,
+            OpMode::B  => trg.b.offset /= src.b.offset,
+            OpMode::AB => trg.b.offset /= src.a.offset,
+            OpMode::BA => trg.a.offset /= src.b.offset,
+            OpMode::X  => {
+                trg.b.offset /= src.a.offset;
+                trg.a.offset /= src.b.offset;
+            }
+            OpMode::I
+                | OpMode::F => {
+                trg.a.offset /= src.a.offset;
+                trg.b.offset /= src.b.offset;
+            }
+        }
+    }
+
+    /// Execute `mod` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    fn exec_mod(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    {
+        match mode {
+            OpMode::A  => trg.a.offset %= src.a.offset,
+            OpMode::B  => trg.b.offset %= src.b.offset,
+            OpMode::AB => trg.b.offset %= src.a.offset,
+            OpMode::BA => trg.a.offset %= src.b.offset,
+            OpMode::X  => {
+                trg.b.offset %= src.a.offset;
+                trg.a.offset %= src.b.offset;
+            }
+            OpMode::I
+                | OpMode::F => {
+                trg.a.offset %= src.a.offset;
+                trg.b.offset %= src.b.offset;
+            }
+        }
+    }
+
+    /// Execute `jmp` instruction
+    ///
+    /// Supported OpModes: `B`
+    fn exec_jmp(mode: OpMode, src: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `jmz` instruction
+    ///
+    /// Supported OpModes: `B`
+    fn exec_jmz(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `jmn` instruction
+    ///
+    /// Supported OpModes: `B`
+    fn exec_jmn(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `djn` instruction
+    ///
+    /// Supported OpModes: `B`
+    fn exec_djn(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `spl` instruction
+    ///
+    /// Supported OpModes: `B`
+    fn exec_spl(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `cmp` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    fn exec_cmp(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `seq` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    fn exec_seq(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `sne` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    fn exec_sne(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `slt` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    fn exec_slt(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `ldp` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    fn exec_ldp(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+
+    /// Execute `stp` instruction
+    ///
+    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    fn exec_stp(mode: OpMode, src: &Instruction, trg: &Instruction)
+    {
+        unimplemented!();
+    }
+    /////////////
+    // Data accessors
+    /////////////
 }
 
