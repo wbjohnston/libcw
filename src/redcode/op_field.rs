@@ -1,3 +1,4 @@
+
 use redcode::{OpCode, OpMode};
 
 /// Field Containg the `OpCode` and `OpMode`
