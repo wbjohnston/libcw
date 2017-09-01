@@ -93,30 +93,49 @@ pub struct Core
 
 impl Core
 {
-    // TODO: Determine if `exec_*(src: &Instruction, trg: &mut Instruction)`
-    // is a bad API
     /// Step forward one cycle
-    pub fn step(&mut self)
-        -> CoreResult<CoreEvent>
+    pub fn step(&mut self) -> CoreResult<CoreEvent>
     {
+        if self.process_queue.is_empty() {
+            return Err(CoreError::AlreadyTerminated);
+        }
+
+        let (pid, mut q) = self.process_queue.pop_back().unwrap();
+        self.last_pid = Some(pid);
         // FIXME: this is written pretty badly
         // get active process counter
-        if let Some((pid, mut q)) = self.process_queue.pop_back() {
-            self.last_pid = Some(pid);
-            let pc = q.pop_back().unwrap(); 
+        let pc = q.pop_back().unwrap(); 
+        let i = self.fetch(pc).clone();
+        let src_addr = self.calc_target_addr(pc, i.a);
+        let trg_addr = self.calc_target_addr(pc, i.b);
+        let code = i.op.code;
+        let mode = i.op.mode;
+        
+        // Pre-decrement phase
+        {
+            // shorthand
+            use self::AddressingMode::AIndirectPreDecrement as APD;
+            use self::AddressingMode::BIndirectPreDecrement as BPD;
 
-            let i = self.fetch(pc).clone();
-            let src_addr = self.calc_target_addr(pc, i.a);
-            let trg_addr = self.calc_target_addr(pc, i.b);
-            let (code, mode) = (i.op.code, i.op.mode);
+            let src = self.fetch_mut(src_addr);                
 
+            if i.a.mode == APD || i.a.mode == BPD {
+                src.a.offset -= 1;
+            }
+
+            if i.b.mode == APD || i.b.mode == BPD {
+                src.b.offset -= 1;
+            }
+        }
+        
+        let exec_event = {
             // FIXME: fix borrow checker, need to use `split_at_mut(usize)`
             // to get two mutable slices of the memory buffer
-            let src = &self.fetch(src_addr).clone();
+            let src = &self.fetch_mut(src_addr).clone();
             let trg = self.fetch_mut(trg_addr);
 
             // execution phase
-            let exec_event = match code {
+            match code {
                 OpCode::Dat => Ok(CoreEvent::Terminated(pid)),
                 OpCode::Mov => {
                     Self::exec_mov(mode, src, trg);
@@ -187,18 +206,29 @@ impl Core
                     Ok(CoreEvent::Stepped(pc + 1))
                 }
                 OpCode::Nop => Ok(CoreEvent::Stepped(pc + 1)),
-            }?;
+            }?
+        };
 
-            // requeue process queue if there are still threads
-            // TODO: process results of exec_* fns
 
-            // TODO: PostIncrement phase
+        // Post increment phase
+        {
+            use self::AddressingMode::AIndirectPostIncrement as APD;
+            use self::AddressingMode::BIndirectPostIncrement as BPD;
 
-            Ok(exec_event)
-        } else {
-            // tried stepping after the core has terminated
-            Err(CoreError::AlreadyTerminated)
+            let src = self.fetch_mut(src_addr);                
+
+            if i.a.mode == APD || i.a.mode == BPD { // check a
+                src.a.offset += 1;
+            }
+
+            if i.b.mode == APD || i.b.mode == BPD { // check b
+                src.b.offset += 1;
+            }
         }
+
+        // requeue process queue if there are still threads
+        // TODO: process results of exec_* fns
+        Ok(exec_event)
     }
 
     /// Get the program counters for all processes
@@ -281,47 +311,49 @@ impl Core
     /// * `addr`: address of `Instruction` to fetch
     fn fetch_mut(&mut self, addr: Address) -> &mut Instruction
     {
-        let addr = self.calc_addr(addr, 0);
+        let addr = addr % self.size();
         &mut self.memory[addr as usize]
     }
 
     /// Calculate an address plus an offset taking core size into account
+    ///
     /// # Arguments
     /// * `base`: base address
     /// * `offst`: offset of base to calculate
-    #[inline]
     fn calc_addr(&self, base: Address, offset: Offset) -> Address
     {
-        unimplemented!("Need to handle underflow overflow within core bounds");
+        unimplemented!();
     }
 
-    // TODO: this should just take in a `Field` instead of an `Offset` and
-    // `Mode`
-    /// TODO: docs
-    fn calc_target_addr(&self, addr: Address, field: Field) -> Address
+    /// Calculate an address taking into account indirection
+    ///
+    /// # Arguments
+    /// * `base`: base address
+    /// * `field`: instruction field that contains addressing data
+    fn calc_target_addr(&self, base: Address, field: Field) -> Address
     {
-        unimplemented!("This probably doesn't work right now");
+        unimplemented!();
+        // unimplemented!("This probably doesn't work right now");
         // calculate first so we don't have to do multiple function calls
-        // let direct_addr = self.calc_addr(addr, field.offset);
+        // let direct_addr = self.memory[base % self.size()];
 
-        // match field.mode {
-        //     AddressingMode::Direct => direct_addr,
-        //     AddressingMode::AIndirect
-        //         | AddressingMode::AIndirectPreDecrement
-        //         | AddressingMode::AIndirectPostIncrement => {
-        //         let indirect_offset = self.fetch(direct_addr).a.offset;    
-
-        //         self.calc_addr(direct_addr, indirect_offset)
-        //     },
-        //     AddressingMode::BIndirect 
-        //         | AddressingMode::BIndirectPreDecrement
-        //         | AddressingMode::BIndirectPostIncrement =>
-        //     {
-        //         let indirect_offset = self.fetch(direct_addr).b.offset;    
-        //         self.calc_addr(direct_addr, indirect_offset)
-        //     },
-        //     AddressingMode::Immediate => unreachable!() 
-        // }
+//         match field.mode {
+//             AddressingMode::Direct => direct_addr,
+//             AddressingMode::AIndirect
+//                 | AddressingMode::AIndirectPreDecrement
+//                 | AddressingMode::AIndirectPostIncrement => {
+//                 let indirect_offset = self.fetch(direct_addr).a.offset;    
+//                 self.calc_addr(direct_addr, indirect_offset)
+//             },
+//             AddressingMode::BIndirect 
+//                 | AddressingMode::BIndirectPreDecrement
+//                 | AddressingMode::BIndirectPostIncrement =>
+//             {
+//                 let indirect_offset = self.fetch(direct_addr).b.offset;    
+//                 (direct_addr + indirect_offset) % self.size()
+//             },
+//             AddressingMode::Immediate => unreachable!() 
+//         }
     }
 
     /// Execute `mov` instruction
@@ -387,7 +419,7 @@ impl Core
                 trg.a.offset -= src.a.offset;
                 trg.b.offset -= src.b.offset;
             }
-        }
+        };
     }
 
     /// Execute `mul` instruction
@@ -409,7 +441,7 @@ impl Core
                 trg.a.offset *= src.a.offset;
                 trg.b.offset *= src.b.offset;
             }
-        }
+        };
     }
 
     /// Execute `div` instruction
@@ -431,7 +463,7 @@ impl Core
                 trg.a.offset /= src.a.offset;
                 trg.b.offset /= src.b.offset;
             }
-        }
+        };
     }
 
     /// Execute `mod` instruction
@@ -453,7 +485,7 @@ impl Core
                 trg.a.offset %= src.a.offset;
                 trg.b.offset %= src.b.offset;
             }
-        }
+        };
     }
 
     /// Execute `jmp` instruction
@@ -543,8 +575,5 @@ impl Core
     {
         unimplemented!();
     }
-    /////////////
-    // Data accessors
-    /////////////
 }
 
