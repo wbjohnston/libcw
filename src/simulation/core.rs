@@ -104,12 +104,12 @@ impl Core
         self.last_pid = Some(pid);
         // FIXME: this is written pretty badly
         // get active process counter
-        let pc = q.pop_back().unwrap(); 
-        let i = self.fetch(pc).clone();
+        let pc       = q.pop_back().unwrap();
+        let i        = self.fetch(pc).clone();
         let src_addr = self.calc_target_addr(pc, i.a);
         let trg_addr = self.calc_target_addr(pc, i.b);
-        let code = i.op.code;
-        let mode = i.op.mode;
+        let code     = i.op.code;
+        let mode     = i.op.mode;
         
         // Pre-decrement phase
         {
@@ -128,87 +128,7 @@ impl Core
             }
         }
         
-        let exec_event = {
-            // FIXME: fix borrow checker, need to use `split_at_mut(usize)`
-            // to get two mutable slices of the memory buffer
-            let src = &self.fetch_mut(src_addr).clone();
-            let trg = self.fetch_mut(trg_addr);
-
-            // execution phase
-            match code {
-                OpCode::Dat => Ok(CoreEvent::Terminated(pid)),
-                OpCode::Mov => {
-                    Self::exec_mov(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }, 
-                OpCode::Add => {
-                    Self::exec_add(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Sub => {
-                    Self::exec_sub(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Mul => {
-                    Self::exec_mul(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Div => {
-                    Self::exec_div(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Mod => {
-                    Self::exec_mod(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Jmp => {
-                    Self::exec_jmp(mode, src);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Jmz => {
-                    Self::exec_jmz(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Jmn => {
-                    Self::exec_jmn(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Djn => {
-                    Self::exec_djn(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Spl => {
-                    Self::exec_spl(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                },
-                OpCode::Cmp => {
-                    Self::exec_cmp(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Seq => {
-                    Self::exec_seq(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                },
-                OpCode::Sne => {
-                    Self::exec_sne(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                },
-                OpCode::Slt => {
-                    Self::exec_slt(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Ldp => {
-                    Self::exec_ldp(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Stp => {
-                    Self::exec_stp(mode, src, trg);
-                    Ok(CoreEvent::Stepped(pc + 1))
-                }
-                OpCode::Nop => Ok(CoreEvent::Stepped(pc + 1)),
-            }?
-        };
-
+        let exec_event = self.execute(i)?;
 
         // Post increment phase
         {
@@ -226,9 +146,28 @@ impl Core
             }
         }
 
+        match exec_event {
+            CoreEvent::Stepped(pc) => {
+                q.push_front(pc);
+                self.process_queue.push_front((pid, q));
+            },
+            CoreEvent::Split(pc1, pc2) => {
+                q.push_front(pc1);
+                q.push_front(pc2);
+                self.process_queue.push_front((pid, q));
+            },
+            _ => {}
+        };  
+
         // requeue process queue if there are still threads
         // TODO: process results of exec_* fns
         Ok(exec_event)
+    }
+
+    /// Execute an instruction on the core
+    pub fn execute(&mut self, instr: Instruction) -> CoreResult<CoreEvent>
+    {
+        unimplemented!();
     }
 
     /// Get the program counters for all processes
@@ -281,14 +220,7 @@ impl Core
         self.last_pid
     }
 
-    /// The number of programs currently loaded into memory
-    #[inline]
-    pub fn pcount(&self) -> usize
-    {
-        self.process_queue.len()
-    }
-
-    /// Get the number of process currently running
+    /// Get the number of processes currently running
     #[inline]
     pub fn process_count(&self) -> usize
     {
@@ -322,7 +254,23 @@ impl Core
     /// * `offst`: offset of base to calculate
     fn calc_addr(&self, base: Address, offset: Offset) -> Address
     {
-        unimplemented!();
+        if offset < 0 { // positive or negative
+            let offset = (-offset) as usize;
+
+            if offset > base { // underflow
+                 self.size() - (offset - base)
+            } else {
+                base - offset % self.size()
+            }
+        } else {
+            let offset = offset as usize;
+
+            if base + offset > self.size() { // overflow
+                0
+            } else {
+                base + offset
+            }
+        }
     }
 
     /// Calculate an address taking into account indirection
@@ -332,29 +280,31 @@ impl Core
     /// * `field`: instruction field that contains addressing data
     fn calc_target_addr(&self, base: Address, field: Field) -> Address
     {
-        unimplemented!();
         // unimplemented!("This probably doesn't work right now");
         // calculate first so we don't have to do multiple function calls
-        // let direct_addr = self.memory[base % self.size()];
+        let direct = self.calc_addr(base, field.offset);
 
-//         match field.mode {
-//             AddressingMode::Direct => direct_addr,
-//             AddressingMode::AIndirect
-//                 | AddressingMode::AIndirectPreDecrement
-//                 | AddressingMode::AIndirectPostIncrement => {
-//                 let indirect_offset = self.fetch(direct_addr).a.offset;    
-//                 self.calc_addr(direct_addr, indirect_offset)
-//             },
-//             AddressingMode::BIndirect 
-//                 | AddressingMode::BIndirectPreDecrement
-//                 | AddressingMode::BIndirectPostIncrement =>
-//             {
-//                 let indirect_offset = self.fetch(direct_addr).b.offset;    
-//                 (direct_addr + indirect_offset) % self.size()
-//             },
-//             AddressingMode::Immediate => unreachable!() 
-//         }
+        match field.mode {
+            AddressingMode::Direct => direct,
+            AddressingMode::AIndirect
+                | AddressingMode::AIndirectPreDecrement
+                | AddressingMode::AIndirectPostIncrement => {
+                let indirect = self.fetch(direct).a.offset;    
+                self.calc_addr(direct, indirect)
+            },
+            AddressingMode::BIndirect 
+                | AddressingMode::BIndirectPreDecrement
+                | AddressingMode::BIndirectPostIncrement =>
+            {
+                let indirect = self.fetch(direct).b.offset;    
+                self.calc_addr(direct, indirect)
+            },
+            AddressingMode::Immediate => unreachable!() 
+        }
     }
+
+    // TODO: need to move current process queue and global queue to 
+    // a field in the `Core` struct and make all execution methods mutable
 
     /// Execute `mov` instruction
     /// 
@@ -367,14 +317,14 @@ impl Core
             OpMode::AB => trg.b = src.a,
             OpMode::BA => trg.a = src.b,
             OpMode::X  => {
-                trg.b      = src.a;
-                trg.a      = src.b;
+                trg.b = src.a;
+                trg.a = src.b;
             }
             OpMode::F  => {
-                trg.a      = src.a;
-                trg.b      = src.b;
+                trg.a = src.a;
+                trg.b = src.b;
             }
-            OpMode::I  => *trg = *src,
+            OpMode::I => *trg = *src,
         };
     }
 
@@ -491,6 +441,7 @@ impl Core
     /// Execute `jmp` instruction
     ///
     /// Supported OpModes: `B`
+    #[allow(dead_code, unused_variables)]
     fn exec_jmp(mode: OpMode, src: &Instruction)
     {
         unimplemented!();
@@ -499,6 +450,7 @@ impl Core
     /// Execute `jmz` instruction
     ///
     /// Supported OpModes: `B`
+    #[allow(dead_code, unused_variables)]
     fn exec_jmz(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -507,6 +459,7 @@ impl Core
     /// Execute `jmn` instruction
     ///
     /// Supported OpModes: `B`
+    #[allow(dead_code, unused_variables)]
     fn exec_jmn(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -515,6 +468,7 @@ impl Core
     /// Execute `djn` instruction
     ///
     /// Supported OpModes: `B`
+    #[allow(dead_code, unused_variables)]
     fn exec_djn(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -523,6 +477,7 @@ impl Core
     /// Execute `spl` instruction
     ///
     /// Supported OpModes: `B`
+    #[allow(dead_code, unused_variables)]
     fn exec_spl(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -531,6 +486,7 @@ impl Core
     /// Execute `cmp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    #[allow(dead_code, unused_variables)]
     fn exec_cmp(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -539,6 +495,7 @@ impl Core
     /// Execute `seq` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    #[allow(dead_code, unused_variables)]
     fn exec_seq(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -547,6 +504,7 @@ impl Core
     /// Execute `sne` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    #[allow(dead_code, unused_variables)]
     fn exec_sne(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -555,6 +513,7 @@ impl Core
     /// Execute `slt` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    #[allow(dead_code, unused_variables)]
     fn exec_slt(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -563,6 +522,7 @@ impl Core
     /// Execute `ldp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    #[allow(dead_code, unused_variables)]
     fn exec_ldp(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();
@@ -571,6 +531,7 @@ impl Core
     /// Execute `stp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    #[allow(dead_code, unused_variables)]
     fn exec_stp(mode: OpMode, src: &Instruction, trg: &Instruction)
     {
         unimplemented!();

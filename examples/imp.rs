@@ -17,7 +17,7 @@ fn main()
                 mode:   AddressingMode::Direct
             },
             b: Field {
-                offset: 1,
+                offset: -1,
                 mode:   AddressingMode::Direct
             }
         },
@@ -25,16 +25,27 @@ fn main()
 
     let mut core = CoreBuilder::new()
         .core_size(8)
-        .load(vec![(0, imp)]).unwrap();
+        .load(vec![(0, imp)])
+        .unwrap();
 
-    for i in 0..1 {
+    println!("START STEP 0");
+    for instr in core.memory() {
+        println!("{:?}", instr);
+    }
+    println!("END STEP 0");
+
+    for i in 1..4 {
         let sim_result = core.step();
 
         println!("START STEP {}", i);
-        println!("{:?}", core);
+        for instr in core.memory() {
+            println!("{:?}", instr);
+        }
         println!("END STEP {}", i);
 
-        if sim_result == Ok(CoreEvent::Finished) {
+        if sim_result == Ok(CoreEvent::Finished) ||
+            sim_result == Err(CoreError::AlreadyTerminated)
+        {
             break;
         }
     }
