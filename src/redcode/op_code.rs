@@ -60,6 +60,7 @@ pub enum OpCode
 
 impl OpCode {
     /// `Seq` is identical to `Cmp`    
+    #[allow(non_upper_case_globals)]
     pub const Cmp: OpCode = OpCode::Seq;   
 }
 

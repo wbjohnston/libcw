@@ -24,11 +24,12 @@ fn main()
     ];
 
     let mut core = CoreBuilder::new()
+        .max_cycles(10)
         .core_size(8)
         .load(vec![(0, None, imp.clone()), (4, None, imp.clone())])
         .unwrap();
 
-    println!("INITIAL STATE");
+    println!("INITIAL STATE START");
     for (i, instr) in core.memory().iter().enumerate() {
         if i as Address == core.pc() {
             println!("PC> {:?}", instr);
@@ -36,12 +37,13 @@ fn main()
             println!("    {:?}", instr);
         }
     }
-    println!("INITIAL STATE");
+    println!("INITIAL STATE END");
 
-    for i in 1..10 {
+    for i in 0.. {
         let sim_result = core.step();
 
-        println!("START STEP {}", i);
+        /// print out core
+        println!("START STEP {}", core.cycle());
         for (i, instr) in core.memory().iter().enumerate() {
             if i as Address == core.pc() {
                 println!("PC> {:?}", instr);
@@ -51,7 +53,7 @@ fn main()
         }
         println!("END STEP {}", i);
 
-        if sim_result == Ok(CoreEvent::Finished) {
+        if core.finished() {
             break;
         }
     }

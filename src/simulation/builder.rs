@@ -138,16 +138,19 @@ impl CoreBuilder
             pq.pop_back().unwrap_or((0 as Pid, VecDeque::new()));
 
         let init_pc = init_queue.pop_back().unwrap_or(0 as Address); 
+        let init_instr = mem[init_pc as usize];
 
         Ok(Core {
             // Runtime data
             memory:        mem,
             current_pid:   init_pid,
             current_queue: init_queue,
+            current_cycle: 0,
             pc:            init_pc,
             process_queue: pq,
             pspace:        pspace,
             finished:      false,
+            ir:            init_instr, 
 
             // Runtime constraints
             version:       self.version,
@@ -175,7 +178,7 @@ impl CoreBuilder
     ///
     /// # Return
     /// `Self`
-    pub fn core_size(&mut self, size: usize) -> &Self
+    pub fn core_size(&mut self, size: usize) -> &mut Self
     {
         self.core_size = size;
         self
@@ -191,7 +194,7 @@ impl CoreBuilder
     ///
     /// # Return
     /// `Self`
-    pub fn pspace_size(&mut self, size: usize) -> &Self
+    pub fn pspace_size(&mut self, size: usize) -> &mut Self
     {
         self.pspace_size = size;
         self
@@ -217,7 +220,7 @@ impl CoreBuilder
     ///
     /// # Return
     /// `Self` 
-    pub fn max_cycles(&mut self, n: usize) -> &Self
+    pub fn max_cycles(&mut self, n: usize) -> &mut Self
     {
         self.max_cycles = n;
         self
@@ -241,7 +244,7 @@ impl CoreBuilder
     ///
     /// # Return
     /// `Self`
-    pub fn max_processes(&mut self, n: usize) -> &Self
+    pub fn max_processes(&mut self, n: usize) -> &mut Self
     {
         self.max_processes = n;
         self
@@ -272,7 +275,7 @@ impl CoreBuilder
     ///
     /// # Return
     /// `Self`
-    pub fn max_length(&mut self, n: usize) -> &Self
+    pub fn max_length(&mut self, n: usize) -> &mut Self
     {
         self.max_length = n;
         self
@@ -285,7 +288,7 @@ impl CoreBuilder
     ///
     /// # Return
     /// `Self`
-    pub fn min_distance(&mut self, n: usize) -> &Self
+    pub fn min_distance(&mut self, n: usize) -> &mut Self
     {
         self.min_distance = n;
         self
@@ -298,7 +301,7 @@ impl CoreBuilder
     ///
     /// # Return
     /// `Self`
-    pub fn version(&mut self, version: usize) -> &Self
+    pub fn version(&mut self, version: usize) -> &mut Self
     {
         self.version = version;
         self
