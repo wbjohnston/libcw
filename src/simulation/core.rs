@@ -120,20 +120,16 @@ impl Core
                 unimplemented!();
             }
         }
-        
-        // Requeue local queue onto process queue if it has active processes
-        match exec_event {
-            CoreEvent::Terminated(_) => {},
-            _ => self.current_queue.push_front(self.pc)
-        };
 
         // check if there are any more process queues running on the core
-        if self.current_queue.is_empty() && self.process_queue.is_empty() {
-            self.finished = true;
-            return Ok(CoreEvent::Finished);
-        } else { // requeue process queue
+        if !self.current_queue.is_empty() {
             let q_entry = (self.pid(), self.current_queue.clone());
             self.process_queue.push_front(q_entry);
+        }
+
+        if self.process_queue.is_empty() && self.current_queue.is_empty() {
+            self.finished = true;
+            return Ok(CoreEvent::Finished);
         }
 
         // Fetch new queue
@@ -267,40 +263,25 @@ impl Core
     {
         use self::AddressingMode::*;
 
-        let pc = self.pc;
+        // fetch the addressing mode and offset
         let (mode, offset) = {
-            let i = self.fetch(self.pc);
-            let field = if use_a_field { i.a } else { i.b };
-
+            let field = if use_a_field { self.ir.a } else { self.ir.b };
             (field.mode, field.offset)
         };
 
+        let direct = self.fetch(self.calc_addr_offset(self.pc, offset));
+
         match mode {
-            Immediate => pc,
-            Direct => self.calc_addr_offset(pc, offset),
+            Immediate => self.pc,
+            Direct => self.calc_addr_offset(self.pc, offset),
             AIndirect
                 | AIndirectPreDecrement
-                | AIndirectPostIncrement => {
-                let direct_offset = {
-                    let direct = self.fetch(
-                        self.calc_addr_offset(self.pc, offset)
-                    );
-                    direct.a.offset
-                };
-
-                self.calc_addr_offset(pc, direct_offset + offset)
-            }
+                | AIndirectPostIncrement => 
+                self.calc_addr_offset(self.pc, direct.a.offset + offset),
             BIndirect
                 | BIndirectPreDecrement
-                | BIndirectPostIncrement => {
-                let direct_offset = {
-                    let direct = self.fetch(
-                        self.calc_addr_offset(self.pc, offset)
-                        );
-                    direct.b.offset
-                };
-                self.calc_addr_offset(pc, direct_offset + offset)
-            }
+                | BIndirectPostIncrement => 
+                self.calc_addr_offset(self.pc, direct.b.offset + offset),
         }
     }
 
@@ -329,8 +310,7 @@ impl Core
     /// Move the program counter forward twice
     fn skip_pc(&mut self) -> CoreEvent
     {
-        self.step_pc(); 
-        self.step_pc(); 
+        self.pc = (self.pc + 2) % self.size() as Address;
         CoreEvent::Skipped
     }
 
@@ -338,6 +318,30 @@ impl Core
     fn jump_pc(&mut self, offset: Offset) -> CoreEvent
     {
         self.pc = self.calc_addr_offset(self.pc, offset);
+        CoreEvent::Jumped
+    }
+
+    /// Move the program counter forward
+    fn step_and_queue_pc(&mut self) -> CoreEvent
+    {
+        self.step_pc();
+        self.current_queue.push_front(self.pc);
+        CoreEvent::Stepped
+    }
+
+    /// Move the program counter forward twice
+    fn skip_and_queue_pc(&mut self) -> CoreEvent
+    {
+        self.skip_pc();
+        self.current_queue.push_front(self.pc);
+        CoreEvent::Skipped
+    }
+
+    /// Jump the program counter by an offset
+    fn jump_and_queue_pc(&mut self, offset: Offset) -> CoreEvent
+    {
+        self.jump_pc(offset);
+        self.current_queue.push_front(self.pc);
         CoreEvent::Jumped
     }
 
@@ -421,7 +425,7 @@ impl Core
         }
 
         self.store_effective_b(b);
-        self.step_pc()
+        self.step_and_queue_pc()
     }
 
     /// Execute `add` instruction
@@ -449,7 +453,7 @@ impl Core
         }
 
         self.store_effective_b(b);
-        self.step_pc()
+        self.step_and_queue_pc()
     }
 
     /// Execute `sub` instruction
@@ -477,7 +481,7 @@ impl Core
         }
 
         self.store_effective_b(b);
-        self.step_pc()
+        self.step_and_queue_pc()
     }
 
     /// Execute `mul` instruction
@@ -505,7 +509,7 @@ impl Core
         }
 
         self.store_effective_b(b);
-        self.step_pc()
+        self.step_and_queue_pc()
     }
 
     /// Execute `div` instruction
@@ -533,7 +537,7 @@ impl Core
         }
 
         self.store_effective_b(b);
-        self.step_pc()
+        self.step_and_queue_pc()
     }
 
     /// Execute `mod` instruction
@@ -561,7 +565,7 @@ impl Core
         }
 
         self.store_effective_b(b);
-        self.step_pc()
+        self.step_and_queue_pc()
     }
 
     /// Execute `jmp` instruction
@@ -573,7 +577,7 @@ impl Core
             AddressingMode::Immediate
                 | AddressingMode::Direct => {
                 let offset = self.ir.a.offset;
-                self.jump_pc(offset);
+                self.jump_and_queue_pc(offset);
             }
             // TODO
             _ => unimplemented!()
@@ -615,10 +619,10 @@ impl Core
             let target = self.effective_addr_a();
             self.current_queue.push_front(target);
 
-            self.step_pc();
+            self.step_and_queue_pc();
             CoreEvent::Split 
         } else {
-            self.step_pc()
+            self.step_and_queue_pc()
         }
     }
 
@@ -642,7 +646,7 @@ impl Core
                                a.b.offset == b.b.offset,
         };
 
-        if skip { self.skip_pc() } else { self.step_pc() }
+        if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
     }
 
     /// Execute `sne` instruction
@@ -665,7 +669,7 @@ impl Core
                                a.b.offset != b.b.offset,
         };
 
-        if skip { self.skip_pc() } else { self.step_pc() }
+        if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
     }
 
     /// Execute `slt` instruction
@@ -688,7 +692,7 @@ impl Core
                                a.b.offset <= b.b.offset,
         };
 
-        if skip { self.skip_pc() } else { self.step_pc() }
+        if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
     }
 
     /// Execute `ldp` instruction
@@ -710,7 +714,7 @@ impl Core
     /// Execute 'nop' instruction
     fn exec_nop(&mut self) -> CoreEvent
     {
-        self.step_pc()
+        self.step_and_queue_pc()
     }
 }
 

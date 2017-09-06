@@ -39,8 +39,10 @@ fn main()
     }
     println!("INITIAL STATE END");
 
+    let mut events = vec![];
+
     for i in 0.. {
-        let sim_result = core.step();
+        events.push(core.step());
 
         /// print out core
         println!("START STEP {}", core.cycle());
@@ -54,8 +56,10 @@ fn main()
         println!("END STEP {}", i);
 
         if core.finished() {
+            println!("TERMINATED");
             break;
         }
     }
-    println!("TERMINATED");
+
+    println!("Events: {:?}", events);
 }
