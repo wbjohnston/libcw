@@ -144,6 +144,7 @@ impl Core
         Ok(exec_event)
     }
 
+    /// TODO
     fn execute(&mut self) -> CoreEvent
     {
         let code = self.ir.op.code;
@@ -170,6 +171,7 @@ impl Core
         }
     }
 
+    /// TODO
     pub fn finished(&mut self) -> bool
     {
         self.finished
@@ -285,15 +287,16 @@ impl Core
         }
     }
 
-    fn effective_addr_b(&self) -> Address
-    {
-        self.effective_addr(false)
-    }
-
     /// Get the effective of address of the current `Instruction`'s A Field
     fn effective_addr_a(&self) -> Address
     {
         self.effective_addr(true)
+    }
+
+    /// TODO
+    fn effective_addr_b(&self) -> Address
+    {
+        self.effective_addr(false)
     }
 
     ////////////////////////////////////////////////////////////////////////////
