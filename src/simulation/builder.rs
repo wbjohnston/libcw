@@ -2,7 +2,7 @@
 
 use std::collections::{VecDeque, HashMap};
 
-use redcode::{Instruction, Program};
+use redcode::{Instruction, Program, Address, Pin, Pid};
 use simulation::Core;
 
 // Core defaults
@@ -75,27 +75,12 @@ impl CoreBuilder
     /// use libcw::simulation::*;
     /// use libcw::redcode::*;
     ///
-    /// // Build program
-    /// let ins = Instruction {
-    ///     op: OpField {
-    ///         code: OpCode::Mov,
-    ///         mode: OpMode::I
-    ///         },
-    ///     a: Field {
-    ///         offset: 0,
-    ///         mode: AddressingMode::Direct
-    ///         },
-    ///     b: Field {
-    ///         offset: 0,
-    ///         mode: AddressingMode::Direct
-    ///         },
-    ///     };
+    /// let program = vec![Instruction::default(); 10];
     ///
-    /// let program = vec![ins; 10];
-    ///
-    /// let starting_address = 100; // program will be loaded at this addr
+    /// let starting_address = 2; // program will be loaded at this addr
     /// let core = CoreBuilder::new()
-    ///     .load(vec![(starting_address, program.clone())])
+    ///     .core_size(8)
+    ///     .load(vec![(starting_address, None, program.clone())])
     ///     .unwrap();
     ///
     ///let (start, end) = (starting_address, starting_address + program.len());
@@ -106,77 +91,68 @@ impl CoreBuilder
     /// );
     /// 
     /// ```
-    pub fn load(&self, programs: Vec<(usize, Program)>) 
+    pub fn load(&self, programs: Vec<(Address, Option<Pin>, Program)>) 
         -> Result<Core, BuilderError>
     {
-        // FIXME: this function is shit mania dot com
+        // create core resources
+        let mut mem = vec![Instruction::default(); self.core_size];
+        let mut pq  = VecDeque::new();
+        let mut pspace  = HashMap::new();
 
-        // **things that happen in this function**
-        // 1. Verify that the programs can fit in memory space with the
-        //      correct distance
-        // 2. Verify that all programs are less than `max_length`
-        // 3. Load programs into memory at the correct offsets
-        // 4. Add local process queue to global process queue
+        //constraint validation
+        let all_valid_length = programs.iter()
+            // .map(|&(_, _, ref prog)| prog.len())
+            .fold(
+                true,
+                |acc, &(_, _, ref prog)| acc && prog.len() <= self.max_length
+            );
 
-        // init struct data structures
-        let mut mem       = vec![Instruction::default(); self.core_size];
-        let mut process_q = VecDeque::new();
-        let mut pspace    = HashMap::new();
-
-        // Proposed change to all range checks
-        // create iterator of all spans for programs
-        // re-use that iterator to do range checks
-
-        // sort programs by offset
-        let mut sorted_programs = programs.clone();
-        sorted_programs.sort_by(|a, b| a.0.cmp(&b.0));
-
-        let spans = sorted_programs.iter()
-            .map(|&(addr, ref prog)| (usize::from(addr), usize::from(addr) + prog.len()));
-
-        // verification step
-        for (i, (start, end)) in spans.enumerate() {
-            // check program length
-            let program_length = end - start;
-            if program_length >= self.max_length {
-                return Err(BuilderError::ProgramTooLong)
-            }
-
-            let program_distance = 100000; // FIXME: this is a cludge
-            if program_distance <= self.min_distance {
-                return Err(BuilderError::InvalidOffset)
-            }
-
+        if !all_valid_length {
+            return Err(BuilderError::ProgramTooLong);
         }
 
-        // Load programs and check if all programs have enough distance 
-        // between them
-        for (pid, &(start, ref program)) in sorted_programs.iter().enumerate() {
-
+        // FIXME: compress this into a single loop
+        // prepare memory
+        for &(base, _, ref program) in programs.iter() {
             // copy program into memory
             for i in 0..program.len() {
-                mem[(i + usize::from(start)) % self.core_size] = program[i];
+                mem[base as usize + i] = program[i];
             }
-
-            // add program to global process queue
-            let mut local_q = VecDeque::new();
-            local_q.push_back(start);
-            process_q.push_back((pid, local_q));
-            
-            // create pspace using the PID as the key
-            let local_pspace = vec![Instruction::default(); self.pspace_size];
-            pspace.insert(pid, local_pspace);
         }
 
+        // prepare pspace
+        for (pid, &(_, maybe_pin, _)) in programs.iter().enumerate() {
+            let pin = maybe_pin.unwrap_or(pid as Pin);
+            pspace.insert(pin, vec![Instruction::default(); self.pspace_size]);
+        }
+
+        // prepare process queue
+        for (pid, &(base, _, _)) in programs.iter().enumerate() {
+            let mut local_pq = VecDeque::new();
+            local_pq.push_front(base); 
+            pq.push_front((pid as Pid, local_pq));
+        }
+
+        // this handles the case where no programs were loaded
+        let (init_pid, mut init_queue) = 
+            pq.pop_back().unwrap_or((0 as Pid, VecDeque::new()));
+
+        let init_pc = init_queue.pop_back().unwrap_or(0 as Address); 
 
         Ok(Core {
+            // Runtime data
             memory:        mem,
-            last_pid:      None,
+            current_pid:   init_pid,
+            current_queue: init_queue,
+            pc:            init_pc,
+            process_queue: pq,
+            pspace:        pspace,
+            finished:      false,
+
+            // Runtime constraints
             version:       self.version,
             max_processes: self.max_processes,
             max_cycles:    self.max_cycles,
-            process_queue: process_q,
-            pspace:        pspace
         })
     }
 
@@ -286,7 +262,7 @@ impl CoreBuilder
     /// 
     /// let core = CoreBuilder::new()
     ///     .max_length(100)
-    ///     .load(vec![(0, vec![ins; 101])]);
+    ///     .load(vec![(0, None, vec![ins; 101])]);
     ///
     /// assert_eq!(Err(BuilderError::ProgramTooLong), core);
     /// ```

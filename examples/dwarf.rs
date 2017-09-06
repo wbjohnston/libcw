@@ -67,7 +67,7 @@ fn main()
 
     let mut core = CoreBuilder::new()
         .core_size(8)
-        .load(vec![(0, dwarf)]).unwrap();
+        .load(vec![(0, None, dwarf)]).unwrap();
 
     for i in 0..4 {
         let sim_result = core.step();
@@ -77,9 +77,5 @@ fn main()
             println!("{:?}", instr);
         }
         println!("END STEP {}", i);
-
-        if sim_result == Ok(CoreEvent::Finished) {
-            break;
-        }
     }
 }

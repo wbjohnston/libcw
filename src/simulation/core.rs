@@ -5,15 +5,11 @@
 // TODO: implement p-space PIN's
 
 use std::collections::{VecDeque, HashMap};
-use std::fmt;
-use std::error::Error;
+use std::num::Wrapping;
 
 use redcode::*;
 
-/// Process ID
-pub type PID = usize;
-
-pub type CoreResult<T> = Result<T, CoreError>;
+pub type CoreResult<T> = Result<T, ()>;
 
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -26,43 +22,19 @@ pub enum CoreEvent
     Tied,
 
     /// Process split inner contains address of new pc
-    Split(Address, Address),
+    Split(Offset),
 
     /// A process terminated
-    Terminated(PID),
+    Terminated(Pid),
 
     /// A process jumped address
-    Jumped(Address),
+    Jumped(Offset),
+
+    /// Skipped happens in all `Skip if ...` instructions
+    Skipped,
 
     /// Nothing happened
-    Stepped(Address),
-}
-
-/// Kinds of `Simulator` runtime errors
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum CoreError
-{
-    /// Thrown when trying to step after the simulation has already terminated
-    AlreadyTerminated
-}
-
-impl fmt::Display for CoreError
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
-    {
-        write!(f, "TODO") // TODO
-    }
-}
-
-impl Error for CoreError
-{
-    fn description(&self) -> &str
-    {
-        match *self {
-            CoreError::AlreadyTerminated => 
-                "Cannot step after simulator has terminated"
-        }
-    }
+    Stepped,
 }
 
 /// Core wars runtime
@@ -73,22 +45,32 @@ pub struct Core
     pub(super) memory:        Vec<Instruction>,
 
     /// Current process id being run
-    pub(super) last_pid:      Option<PID>,
+    pub(super) current_pid:   Pid,
+
+    /// Current program counter
+    pub(super) pc:            Address,
+
+    /// Current process queue
+    pub(super) current_queue: VecDeque<Address>,
+
+    /// Program counter for each process currently loaded into memory
+    pub(super) process_queue: VecDeque<(Pid, VecDeque<Address>)>,
+
+    /// Private storage space for warriors
+    pub(super) pspace:        HashMap<Pin, Vec<Instruction>>,
+
+    /// Has the core finished executing 
+    pub(super) finished:    bool,
+
+    // Runtime constraints
+    /// Core version
+    pub(super) version:       usize,
 
     /// Maximum of processes that can be on the process queue at any time
     pub(super) max_processes: usize,
 
     /// Maximum number of cycles that can pass before a tie is declared
     pub(super) max_cycles:    usize,
-
-    /// Program counter for each process currently loaded into memory
-    pub(super) process_queue: VecDeque<(PID, VecDeque<Address>)>,
-
-    /// Private storage space for warriors
-    pub(super) pspace:        HashMap<usize, Vec<Instruction>>,
-
-    /// Core version
-    pub(super) version:       usize,
 }
 
 impl Core
@@ -96,78 +78,113 @@ impl Core
     /// Step forward one cycle
     pub fn step(&mut self) -> CoreResult<CoreEvent>
     {
-        if self.process_queue.is_empty() {
-            return Err(CoreError::AlreadyTerminated);
-        }
+        // Fetch instruction
+        let i = self.fetch(self.pc);
+        let (a_mode, b_mode) = (i.a.mode, i.b.mode);
 
-        let (pid, mut q) = self.process_queue.pop_back().unwrap();
-        self.last_pid = Some(pid);
-        // FIXME: this is written pretty badly
-        // get active process counter
-        let pc       = q.pop_back().unwrap();
-        let i        = self.fetch(pc).clone();
-        let src_addr = self.calc_target_addr(pc, i.a);
-        let trg_addr = self.calc_target_addr(pc, i.b);
-        let code     = i.op.code;
-        let mode     = i.op.mode;
-        
-        // Pre-decrement phase
+        // preincrement phase
         {
-            // shorthand
-            use self::AddressingMode::AIndirectPreDecrement as APD;
-            use self::AddressingMode::BIndirectPreDecrement as BPD;
-
-            let src = self.fetch_mut(src_addr);                
-
-            if i.a.mode == APD || i.a.mode == BPD {
-                src.a.offset -= 1;
+            if a_mode == AddressingMode::AIndirectPreDecrement ||
+                a_mode == AddressingMode::BIndirectPreDecrement {
+                unimplemented!();
             }
 
-            if i.b.mode == APD || i.b.mode == BPD {
-                src.b.offset -= 1;
+            if b_mode == AddressingMode::AIndirectPreDecrement ||
+                b_mode == AddressingMode::BIndirectPreDecrement {
+                unimplemented!();
             }
         }
-        
+
+        // Execute instruction
         let exec_event = self.execute(i)?;
 
-        // Post increment phase
-        {
-            use self::AddressingMode::AIndirectPostIncrement as APD;
-            use self::AddressingMode::BIndirectPostIncrement as BPD;
+        let mut should_requeue = true;
+        // Check if core execution has finished
+        match exec_event {
+            CoreEvent::Stepped => self.current_queue.push_front(self.pc + 1),
+            CoreEvent::Terminated(pid) => {
+                if self.current_queue.len() == 0 {
+                    should_requeue = false; 
+                }
 
-            let src = self.fetch_mut(src_addr);                
-
-            if i.a.mode == APD || i.a.mode == BPD { // check a
-                src.a.offset += 1;
-            }
-
-            if i.b.mode == APD || i.b.mode == BPD { // check b
-                src.b.offset += 1;
-            }
+                if !should_requeue && self.pids().len() == 0 {
+                    self.finished = true;
+                    return Ok(CoreEvent::Finished);
+                }
+            },
+            _ => unimplemented!()
         }
 
-        match exec_event {
-            CoreEvent::Stepped(pc) => {
-                q.push_front(pc);
-                self.process_queue.push_front((pid, q));
-            },
-            CoreEvent::Split(pc1, pc2) => {
-                q.push_front(pc1);
-                q.push_front(pc2);
-                self.process_queue.push_front((pid, q));
-            },
-            _ => {}
-        };  
+        // TODO: postincrement phase
+        {
+            if a_mode == AddressingMode::AIndirectPostIncrement ||
+                a_mode == AddressingMode::BIndirectPostIncrement {
+                unimplemented!();
+            }
 
-        // requeue process queue if there are still threads
-        // TODO: process results of exec_* fns
+            if b_mode == AddressingMode::AIndirectPostIncrement ||
+                b_mode == AddressingMode::BIndirectPostIncrement {
+                unimplemented!();
+            }
+        }
+        
+        if should_requeue {
+            // Requeue local queue onto process queue
+            self.process_queue.push_front(
+                // FIXME: clone inneficient
+                (self.current_pid, self.current_queue.clone()) 
+                );
+        }
+
+        // Fetch new queue
+        let (pid, q) = self.process_queue.pop_back().unwrap();
+        self.current_queue = q;
+        
+        // Update pid and program counter
+        self.pc = self.current_queue.pop_back().unwrap();
+        self.current_pid = pid;
+
         Ok(exec_event)
     }
 
-    /// Execute an instruction on the core
     pub fn execute(&mut self, instr: Instruction) -> CoreResult<CoreEvent>
     {
-        unimplemented!();
+        if self.finished { // can't execute after finished
+            return Err(());
+        }
+
+        let (code, mode) = (instr.op.code, instr.op.mode);
+        // TODO: should we just do address resolution within the exec_* fns?
+        let (a_addr, b_addr) = (
+            self.effective_addr_a(),
+            self.effective_addr_b()
+            );
+        
+        let exec_event = match code {
+            OpCode::Dat => self.exec_dat(),
+            OpCode::Mov => self.exec_mov(mode, a_addr, b_addr),
+            OpCode::Add => self.exec_add(mode, a_addr, b_addr),
+            OpCode::Sub => self.exec_sub(mode, a_addr, b_addr),
+            OpCode::Mul => self.exec_mul(mode, a_addr, b_addr),
+            OpCode::Div => self.exec_div(mode, a_addr, b_addr),
+            OpCode::Mod => self.exec_mod(mode, a_addr, b_addr),
+            // OpCode::Mov => 
+            _ => unimplemented!()
+
+        };
+
+        Ok(exec_event)
+    }
+
+    pub fn finished(&mut self) -> bool
+    {
+        self.process_queue.is_empty()
+    }
+
+    /// Get `Pid` currently executing on the core
+    pub fn pc(&self) -> Address
+    {
+        self.pc
     }
 
     /// Get the program counters for all processes
@@ -175,9 +192,15 @@ impl Core
     {
         unimplemented!();
     }
+    
+    /// Get the current `Pid` executing
+    pub fn pid(&self) -> Pid
+    {
+        self.current_pid
+    }
 
-    /// Get all `PID`s that are currently active
-    pub fn pids(&self) -> Vec<PID>
+    /// Get all `Pid`s that are currently active
+    pub fn pids(&self) -> Vec<Pid>
     {
         self.process_queue.iter().map(|&(pid, _)| pid).collect()
     }
@@ -207,251 +230,329 @@ impl Core
     }
 
     /// Get immutable reference to memory
-    #[inline]
     pub fn memory(&self) -> &[Instruction]
     {
         &self.memory.as_slice()
     }
 
-    /// Get the last process id run
-    #[inline]
-    pub fn last_pid(&self) -> Option<PID>
-    {
-        self.last_pid
-    }
-
     /// Get the number of processes currently running
-    #[inline]
     pub fn process_count(&self) -> usize
     {
         // count length of all local process queues in the global pqueue
         self.process_queue.iter().fold(0, |acc, &(_, ref x)| acc + x.len())
     }
 
-    /// Fetch `Instruction` at target address
-    ///
-    /// # Arguments
-    /// `addr`: address of `Instruction` to fetch
-    fn fetch(&self, addr: Address) -> &Instruction
-    {
-        &self.memory[addr as usize]
-    }
+    ////////////////////////////////////////////////////////////////////////////
+    // Address resolution functions
+    ////////////////////////////////////////////////////////////////////////////
 
-    /// Fetch an mutable reference to target `Instruction`
-    ///
-    /// # Arguments
-    /// * `addr`: address of `Instruction` to fetch
-    fn fetch_mut(&mut self, addr: Address) -> &mut Instruction
+    /// Calculate the address after adding an offset
+    fn calc_addr_offset(&self, base: Address, offset: Offset) -> Address
     {
-        let addr = addr % self.size();
-        &mut self.memory[addr as usize]
-    }
-
-    /// Calculate an address plus an offset taking core size into account
-    ///
-    /// # Arguments
-    /// * `base`: base address
-    /// * `offst`: offset of base to calculate
-    fn calc_addr(&self, base: Address, offset: Offset) -> Address
-    {
-        if offset < 0 { // positive or negative
-            let offset = (-offset) as usize;
-
-            if offset > base { // underflow
-                 self.size() - (offset - base)
-            } else {
-                base - offset % self.size()
-            }
+        if offset < 0 {
+            (base.wrapping_sub(-offset as Address))
         } else {
-            let offset = offset as usize;
+            (base.wrapping_add(offset as Address))
+        }
+    }
 
-            if base + offset > self.size() { // overflow
-                0
-            } else {
-                base + offset
+    /// Get the effective of address of the current `Instruction`
+    fn effective_addr(&self, use_a_field: bool) -> Address
+    {
+        use self::AddressingMode::*;
+
+        let pc = self.pc;
+        let (mode, offset) = {
+            let i = self.fetch(self.pc);
+            let field = if use_a_field { i.a } else { i.b };
+
+            (field.mode, field.offset)
+        };
+
+        match mode {
+            Immediate => pc,
+            Direct => self.calc_addr_offset(pc, offset),
+            AIndirect
+                | AIndirectPreDecrement
+                | AIndirectPostIncrement => {
+                let direct_offset = {
+                    let direct = self.fetch(
+                        self.calc_addr_offset(self.pc, offset)
+                    );
+                    direct.a.offset
+                };
+
+                self.calc_addr_offset(pc, direct_offset + offset)
+            }
+            BIndirect
+                | BIndirectPreDecrement
+                | BIndirectPostIncrement => {
+                let direct_offset = {
+                    let direct = self.fetch(
+                        self.calc_addr_offset(self.pc, offset)
+                        );
+                    direct.b.offset
+                };
+                self.calc_addr_offset(pc, direct_offset + offset)
             }
         }
     }
 
-    /// Calculate an address taking into account indirection
-    ///
-    /// # Arguments
-    /// * `base`: base address
-    /// * `field`: instruction field that contains addressing data
-    fn calc_target_addr(&self, base: Address, field: Field) -> Address
+    fn effective_addr_b(&self) -> Address
     {
-        // unimplemented!("This probably doesn't work right now");
-        // calculate first so we don't have to do multiple function calls
-        let direct = self.calc_addr(base, field.offset);
-
-        match field.mode {
-            AddressingMode::Direct => direct,
-            AddressingMode::AIndirect
-                | AddressingMode::AIndirectPreDecrement
-                | AddressingMode::AIndirectPostIncrement => {
-                let indirect = self.fetch(direct).a.offset;    
-                self.calc_addr(direct, indirect)
-            },
-            AddressingMode::BIndirect 
-                | AddressingMode::BIndirectPreDecrement
-                | AddressingMode::BIndirectPostIncrement =>
-            {
-                let indirect = self.fetch(direct).b.offset;    
-                self.calc_addr(direct, indirect)
-            },
-            AddressingMode::Immediate => unreachable!() 
-        }
+        self.effective_addr(false)
     }
 
-    // TODO: need to move current process queue and global queue to 
-    // a field in the `Core` struct and make all execution methods mutable
+    /// Get the effective of address of the current `Instruction`'s A Field
+    fn effective_addr_a(&self) -> Address
+    {
+        self.effective_addr(true)
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Storage and retrieval functions
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// Store an `Instruction` in memory
+    fn store(&mut self, addr: Address, instr: Instruction)
+    {
+        let mem_size = self.size();
+        self.memory[addr as usize % mem_size] = instr;
+    }
+
+    /// TODO
+    fn store_effective_a(&mut self, instr: Instruction)
+    {
+        let eff_addr = self.effective_addr_a();
+        self.store(eff_addr, instr)
+    }
+
+    /// TODO
+    fn store_effective_b(&mut self, instr: Instruction)
+    {
+        let eff_addr = self.effective_addr_b();
+        self.store(eff_addr, instr)
+    }
+
+    /// Fetch copy of instruction in memory
+    fn fetch(&self, addr: Address) -> Instruction
+    {
+        self.memory[addr as usize % self.size()]
+    }
+
+    /// TODO
+    fn fetch_effective_a(&self) -> Instruction
+    {
+        self.fetch(self.effective_addr_a())
+    }
+
+    /// TODO
+    fn fetch_effective_b(&self) -> Instruction
+    {
+        self.fetch(self.effective_addr_b())
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Instruction execution functions
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// Execute `dat` instruction
+    /// 
+    /// Supported OpModes: None
+    fn exec_dat(&self) -> CoreEvent
+    {
+        CoreEvent::Terminated(self.pid())
+    }
 
     /// Execute `mov` instruction
     /// 
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_mov(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    fn exec_mov(&mut self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
+        let a     = self.fetch(a_addr);
+        let mut b = self.fetch(b_addr);
+
         match mode {
-            OpMode::A  => trg.a = src.a,
-            OpMode::B  => trg.b = src.b,
-            OpMode::AB => trg.b = src.a,
-            OpMode::BA => trg.a = src.b,
-            OpMode::X  => {
-                trg.b = src.a;
-                trg.a = src.b;
-            }
-            OpMode::F  => {
-                trg.a = src.a;
-                trg.b = src.b;
-            }
-            OpMode::I => *trg = *src,
-        };
+            OpMode::A => b.a = a.a,
+            OpMode::B => b.b = a.b,
+            OpMode::AB =>b.a = a.b,
+            OpMode::BA =>b.b = a.a,
+            OpMode::F => {
+                b.a = a.a;
+                b.b = a.b;
+            },
+            OpMode::X => {
+                b.a = a.b;
+                b.b = a.a;
+            },
+            OpMode::I => b = a
+        }
+
+        self.store(b_addr, b);
+        CoreEvent::Stepped
     }
 
     /// Execute `add` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_add(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    fn exec_add(&mut self, mode: OpMode, a_addr: Address, b_addr: Address)
+        -> CoreEvent
     {
+        let a     = self.fetch(a_addr);
+        let mut b = self.fetch(b_addr);
+
         match mode {
-            OpMode::A  => trg.a.offset += src.a.offset,
-            OpMode::B  => trg.b.offset += src.b.offset,
-            OpMode::AB => trg.b.offset += src.a.offset,
-            OpMode::BA => trg.a.offset += src.b.offset,
-            OpMode::X  => {
-                trg.b.offset += src.a.offset;
-                trg.a.offset += src.b.offset;
-            }
-            OpMode::I
-                | OpMode::F => {
-                trg.a.offset += src.a.offset;
-                trg.b.offset += src.b.offset;
-            }
-        };
+            OpMode::A => b.a.offset += a.a.offset,
+            OpMode::B => b.b.offset += a.b.offset,
+            OpMode::AB =>b.a.offset += a.b.offset,
+            OpMode::BA =>b.b.offset += a.a.offset,
+            OpMode::F 
+                | OpMode::I => {
+                b.a.offset += a.a.offset;
+                b.b.offset += a.b.offset;
+            },
+            OpMode::X => {
+                b.b.offset += a.a.offset;
+                b.a.offset += a.b.offset;
+            },
+        }
+
+        self.store_effective_b(b);
+        CoreEvent::Stepped
     }
 
     /// Execute `sub` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_sub(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    fn exec_sub(&mut self, mode: OpMode, a_addr: Address, b_addr: Address)
+        -> CoreEvent
     {
+        let a     = self.fetch(a_addr);
+        let mut b = self.fetch(b_addr);
+
         match mode {
-            OpMode::A  => trg.a.offset -= src.a.offset,
-            OpMode::B  => trg.b.offset -= src.b.offset,
-            OpMode::AB => trg.b.offset -= src.a.offset,
-            OpMode::BA => trg.a.offset -= src.b.offset,
-            OpMode::X  => {
-                trg.b.offset -= src.a.offset;
-                trg.a.offset -= src.b.offset;
-            }
-            OpMode::I
-                | OpMode::F => {
-                trg.a.offset -= src.a.offset;
-                trg.b.offset -= src.b.offset;
-            }
-        };
+            OpMode::A => b.a.offset -= a.a.offset,
+            OpMode::B => b.b.offset -= a.b.offset,
+            OpMode::AB =>b.a.offset -= a.b.offset,
+            OpMode::BA =>b.b.offset -= a.a.offset,
+            OpMode::F 
+                | OpMode::I => {
+                b.a.offset -= a.a.offset;
+                b.b.offset -= a.b.offset;
+            },
+            OpMode::X => {
+                b.b.offset -= a.a.offset;
+                b.a.offset -= a.b.offset;
+            },
+        }
+
+        self.store_effective_b(b);
+        CoreEvent::Stepped
     }
 
     /// Execute `mul` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mul(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    fn exec_mul(&mut self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
+        let a     = self.fetch(a_addr);
+        let mut b = self.fetch(b_addr);
+
         match mode {
-            OpMode::A  => trg.a.offset *= src.a.offset,
-            OpMode::B  => trg.b.offset *= src.b.offset,
-            OpMode::AB => trg.b.offset *= src.a.offset,
-            OpMode::BA => trg.a.offset *= src.b.offset,
-            OpMode::X  => {
-                trg.b.offset *= src.a.offset;
-                trg.a.offset *= src.b.offset;
-            }
-            OpMode::I
-                | OpMode::F => {
-                trg.a.offset *= src.a.offset;
-                trg.b.offset *= src.b.offset;
-            }
-        };
+            OpMode::A => b.a.offset *= a.a.offset,
+            OpMode::B => b.b.offset *= a.b.offset,
+            OpMode::AB =>b.a.offset *= a.b.offset,
+            OpMode::BA =>b.b.offset *= a.a.offset,
+            OpMode::F 
+                | OpMode::I => {
+                b.a.offset *= a.a.offset;
+                b.b.offset *= a.b.offset;
+            },
+            OpMode::X => {
+                b.b.offset *= a.a.offset;
+                b.a.offset *= a.b.offset;
+            },
+        }
+
+        self.store_effective_b(b);
+        CoreEvent::Stepped
     }
 
     /// Execute `div` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_div(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    fn exec_div(&mut self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
+        let a     = self.fetch(a_addr);
+        let mut b = self.fetch(b_addr);
+
         match mode {
-            OpMode::A  => trg.a.offset /= src.a.offset,
-            OpMode::B  => trg.b.offset /= src.b.offset,
-            OpMode::AB => trg.b.offset /= src.a.offset,
-            OpMode::BA => trg.a.offset /= src.b.offset,
-            OpMode::X  => {
-                trg.b.offset /= src.a.offset;
-                trg.a.offset /= src.b.offset;
-            }
-            OpMode::I
-                | OpMode::F => {
-                trg.a.offset /= src.a.offset;
-                trg.b.offset /= src.b.offset;
-            }
-        };
+            OpMode::A => b.a.offset /= a.a.offset,
+            OpMode::B => b.b.offset /= a.b.offset,
+            OpMode::AB =>b.a.offset /= a.b.offset,
+            OpMode::BA =>b.b.offset /= a.a.offset,
+            OpMode::F 
+                | OpMode::I => {
+                b.a.offset /= a.a.offset;
+                b.b.offset /= a.b.offset;
+            },
+            OpMode::X => {
+                b.b.offset /= a.a.offset;
+                b.a.offset /= a.b.offset;
+            },
+        }
+
+        self.store_effective_b(b);
+        CoreEvent::Stepped
     }
 
     /// Execute `mod` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mod(mode: OpMode, src: &Instruction, trg: &mut Instruction)
+    fn exec_mod(&mut self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
+        let a     = self.fetch(a_addr);
+        let mut b = self.fetch(b_addr);
+
         match mode {
-            OpMode::A  => trg.a.offset %= src.a.offset,
-            OpMode::B  => trg.b.offset %= src.b.offset,
-            OpMode::AB => trg.b.offset %= src.a.offset,
-            OpMode::BA => trg.a.offset %= src.b.offset,
-            OpMode::X  => {
-                trg.b.offset %= src.a.offset;
-                trg.a.offset %= src.b.offset;
-            }
-            OpMode::I
-                | OpMode::F => {
-                trg.a.offset %= src.a.offset;
-                trg.b.offset %= src.b.offset;
-            }
-        };
+            OpMode::A => b.a.offset %= a.a.offset,
+            OpMode::B => b.b.offset %= a.b.offset,
+            OpMode::AB =>b.a.offset %= a.b.offset,
+            OpMode::BA =>b.b.offset %= a.a.offset,
+            OpMode::F 
+                | OpMode::I => {
+                b.a.offset %= a.a.offset;
+                b.b.offset %= a.b.offset;
+            },
+            OpMode::X => {
+                b.b.offset %= a.a.offset;
+                b.a.offset %= a.b.offset;
+            },
+        }
+
+        self.store_effective_b(b);
+        CoreEvent::Stepped
     }
 
     /// Execute `jmp` instruction
     ///
     /// Supported OpModes: `B`
-    #[allow(dead_code, unused_variables)]
-    fn exec_jmp(mode: OpMode, src: &Instruction)
+    fn exec_jmp(&self, mode: OpMode, a_addr: Address) 
+        -> CoreEvent
     {
-        unimplemented!();
+        let a = self.fetch(a_addr);
+        CoreEvent::Jumped(a.a.offset)
     }
 
     /// Execute `jmz` instruction
     ///
     /// Supported OpModes: `B`
-    #[allow(dead_code, unused_variables)]
-    fn exec_jmz(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_jmz(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -459,8 +560,8 @@ impl Core
     /// Execute `jmn` instruction
     ///
     /// Supported OpModes: `B`
-    #[allow(dead_code, unused_variables)]
-    fn exec_jmn(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_jmn(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -468,8 +569,7 @@ impl Core
     /// Execute `djn` instruction
     ///
     /// Supported OpModes: `B`
-    #[allow(dead_code, unused_variables)]
-    fn exec_djn(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_djn(&self, mode: OpMode, a: Instruction)
     {
         unimplemented!();
     }
@@ -477,8 +577,8 @@ impl Core
     /// Execute `spl` instruction
     ///
     /// Supported OpModes: `B`
-    #[allow(dead_code, unused_variables)]
-    fn exec_spl(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_spl(&self, mode: OpMode, a_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -486,8 +586,8 @@ impl Core
     /// Execute `cmp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    #[allow(dead_code, unused_variables)]
-    fn exec_cmp(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_cmp(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -495,8 +595,8 @@ impl Core
     /// Execute `seq` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    #[allow(dead_code, unused_variables)]
-    fn exec_seq(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_seq(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -504,8 +604,8 @@ impl Core
     /// Execute `sne` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    #[allow(dead_code, unused_variables)]
-    fn exec_sne(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_sne(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -513,8 +613,8 @@ impl Core
     /// Execute `slt` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    #[allow(dead_code, unused_variables)]
-    fn exec_slt(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_slt(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -522,8 +622,8 @@ impl Core
     /// Execute `ldp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    #[allow(dead_code, unused_variables)]
-    fn exec_ldp(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_ldp(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
     }
@@ -531,10 +631,16 @@ impl Core
     /// Execute `stp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    #[allow(dead_code, unused_variables)]
-    fn exec_stp(mode: OpMode, src: &Instruction, trg: &Instruction)
+    fn exec_stp(&self, mode: OpMode, a_addr: Address, b_addr: Address) 
+        -> CoreEvent
     {
         unimplemented!();
+    }
+
+    /// Execute 'nop' instruction
+    fn exec_nop(&self) -> CoreEvent
+    {
+        CoreEvent::Stepped
     }
 }
 

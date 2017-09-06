@@ -3,7 +3,7 @@
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OpCode
 {
-    /// Data, kills process queue on execution
+    /// Data, kills thread on execution
     Dat,
 
     /// Move (copy)
@@ -39,12 +39,9 @@ pub enum OpCode
     /// Create a new execution thread at target address
     Spl,
 
-    /// Compare (same as `Seq`)
-    Cmp,
-
-    /// Skip if equal
+    /// Compare 
     Seq,
-    
+
     /// Skip if not equal
     Sne,
 
@@ -59,5 +56,10 @@ pub enum OpCode
 
     /// No operation 
     Nop
+}
+
+impl OpCode {
+    /// `Seq` is identical to `Cmp`    
+    pub const Cmp: OpCode = OpCode::Seq;   
 }
 

@@ -4,10 +4,16 @@
 pub type Program = Vec<Instruction>;
 
 /// Address in a core
-pub type Address = usize;
+pub type Address = u32;
 
 /// Offset to an `Address`
-pub type Offset = isize;
+pub type Offset = i16;
+
+/// Process ID
+pub type Pid = u16;
+
+/// P-space PIN
+pub type Pin = Pid;
 
 mod op_code;
 pub use self::op_code::OpCode;
