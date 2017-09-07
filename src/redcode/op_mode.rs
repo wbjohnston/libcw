@@ -1,7 +1,7 @@
 
 use std::fmt;
 
-/// Controls modes for what components of an instruction and OPCODE will 
+/// Controls modes for what components of an instruction and OPCODE will
 /// operate on
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OpMode

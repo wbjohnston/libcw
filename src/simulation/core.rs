@@ -60,7 +60,7 @@ pub struct Core
     /// Private storage space for warriors
     pub(super) pspace:        HashMap<Pin, Vec<Instruction>>,
 
-    /// Has the core finished executing 
+    /// Has the core finished executing
     pub(super) finished:      bool,
 
     // Runtime constraints
@@ -81,7 +81,7 @@ impl Core
     {
         if self.finished() { // can't step after the core is halted
             return Err(());
-        } 
+        }
 
         if self.cycle() >= self.max_cycles() {
             self.finished = true;
@@ -105,7 +105,8 @@ impl Core
             }
         }
 
-        // Execute instruction
+        // Execute instruction(updating the program counter and requeing it
+        // are handled in this phase)
         let exec_event = self.execute();
 
         // TODO: postincrement phase
@@ -136,7 +137,7 @@ impl Core
         // Fetch new queue
         let (pid, q)       = self.process_queue.pop_back().unwrap();
         self.current_queue = q;
-        
+
         // Update pid and program counter
         self.pc          = self.current_queue.pop_back().unwrap();
         self.current_pid = pid;
@@ -172,7 +173,7 @@ impl Core
         }
     }
 
-    /// Has the core finished its execution. This can mean either a tie has 
+    /// Has the core finished its execution. This can mean either a tie has
     /// occurred or a warrior has emerged victoriors
     pub fn finished(&mut self) -> bool
     {
@@ -196,7 +197,7 @@ impl Core
     {
         self.current_cycle
     }
-    
+
     /// Get the current `Pid` executing
     pub fn pid(&self) -> Pid
     {
@@ -267,7 +268,7 @@ impl Core
 
     /// Get the effective of address of the current `Instruction`. This takes
     /// into account the addressing mode of the field used
-    /// 
+    ///
     /// # Arguments
     /// * `use_a_field`: should the A field be used for calculation, or B
     #[inline]
@@ -288,11 +289,11 @@ impl Core
             Direct => self.calc_addr_offset(self.pc, offset),
             AIndirect
                 | AIndirectPreDecrement
-                | AIndirectPostIncrement => 
+                | AIndirectPostIncrement =>
                 self.calc_addr_offset(self.pc, direct.a.offset + offset),
             BIndirect
                 | BIndirectPreDecrement
-                | BIndirectPostIncrement => 
+                | BIndirectPostIncrement =>
                 self.calc_addr_offset(self.pc, direct.b.offset + offset),
         }
     }
@@ -436,7 +437,7 @@ impl Core
     ////////////////////////////////////////////////////////////////////////////
 
     /// Execute `dat` instruction
-    /// 
+    ///
     /// Supported OpModes: None
     fn exec_dat(&self) -> CoreEvent
     {
@@ -444,7 +445,7 @@ impl Core
     }
 
     /// Execute `mov` instruction
-    /// 
+    ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_mov(&mut self) -> CoreEvent
     {
@@ -456,11 +457,13 @@ impl Core
             OpMode::B => b.b = a.b,
             OpMode::AB =>b.a = a.b,
             OpMode::BA =>b.b = a.a,
-            OpMode::F => {
+            OpMode::F =>
+            {
                 b.a = a.a;
                 b.b = a.b;
             },
-            OpMode::X => {
+            OpMode::X =>
+            {
                 b.a = a.b;
                 b.b = a.a;
             },
@@ -484,12 +487,14 @@ impl Core
             OpMode::B => b.b.offset += a.b.offset,
             OpMode::BA =>b.a.offset += a.b.offset,
             OpMode::AB =>b.b.offset += a.a.offset,
-            OpMode::F 
-                | OpMode::I => {
+            OpMode::F
+                | OpMode::I =>
+            {
                 b.a.offset += a.a.offset;
                 b.b.offset += a.b.offset;
             },
-            OpMode::X => {
+            OpMode::X =>
+            {
                 b.b.offset += a.a.offset;
                 b.a.offset += a.b.offset;
             },
@@ -512,12 +517,14 @@ impl Core
             OpMode::B => b.b.offset -= a.b.offset,
             OpMode::BA =>b.a.offset -= a.b.offset,
             OpMode::AB =>b.b.offset -= a.a.offset,
-            OpMode::F 
-                | OpMode::I => {
+            OpMode::F
+                | OpMode::I =>
+            {
                 b.a.offset -= a.a.offset;
                 b.b.offset -= a.b.offset;
             },
-            OpMode::X => {
+            OpMode::X =>
+            {
                 b.b.offset -= a.a.offset;
                 b.a.offset -= a.b.offset;
             },
@@ -540,12 +547,14 @@ impl Core
             OpMode::B => b.b.offset *= a.b.offset,
             OpMode::BA =>b.a.offset *= a.b.offset,
             OpMode::AB =>b.b.offset *= a.a.offset,
-            OpMode::F 
-                | OpMode::I => {
+            OpMode::F
+                | OpMode::I =>
+            {
                 b.a.offset *= a.a.offset;
                 b.b.offset *= a.b.offset;
             },
-            OpMode::X => {
+            OpMode::X =>
+            {
                 b.b.offset *= a.a.offset;
                 b.a.offset *= a.b.offset;
             },
@@ -568,12 +577,14 @@ impl Core
             OpMode::B => b.b.offset /= a.b.offset,
             OpMode::BA =>b.a.offset /= a.b.offset,
             OpMode::AB =>b.b.offset /= a.a.offset,
-            OpMode::F 
-                | OpMode::I => {
+            OpMode::F
+                | OpMode::I =>
+            {
                 b.a.offset /= a.a.offset;
                 b.b.offset /= a.b.offset;
             },
-            OpMode::X => {
+            OpMode::X =>
+            {
                 b.b.offset /= a.a.offset;
                 b.a.offset /= a.b.offset;
             },
@@ -596,12 +607,14 @@ impl Core
             OpMode::B => b.b.offset %= a.b.offset,
             OpMode::BA =>b.a.offset %= a.b.offset,
             OpMode::AB =>b.b.offset %= a.a.offset,
-            OpMode::F 
-                | OpMode::I => {
+            OpMode::F
+                | OpMode::I =>
+            {
                 b.a.offset %= a.a.offset;
                 b.b.offset %= a.b.offset;
             },
-            OpMode::X => {
+            OpMode::X =>
+            {
                 b.b.offset %= a.a.offset;
                 b.a.offset %= a.b.offset;
             },
@@ -618,7 +631,8 @@ impl Core
     {
         match self.ir.a.mode {
             AddressingMode::Immediate
-                | AddressingMode::Direct => {
+                | AddressingMode::Direct =>
+            {
                 let offset = self.ir.a.offset;
                 self.jump_and_queue_pc(offset);
             }
@@ -663,7 +677,7 @@ impl Core
             self.current_queue.push_front(target);
 
             self.step_and_queue_pc();
-            CoreEvent::Split 
+            CoreEvent::Split
         } else {
             self.step_and_queue_pc()
         }
@@ -682,10 +696,10 @@ impl Core
             OpMode::B       => a.b.offset == b.b.offset,
             OpMode::BA      => a.a.offset == b.b.offset,
             OpMode::AB      => a.b.offset == b.a.offset,
-            OpMode::X       => a.b.offset == b.a.offset && 
+            OpMode::X       => a.b.offset == b.a.offset &&
                                a.a.offset == b.b.offset,
             OpMode::F
-                | OpMode::I => a.a.offset == b.a.offset && 
+                | OpMode::I => a.a.offset == b.a.offset &&
                                a.b.offset == b.b.offset,
         };
 
@@ -705,10 +719,10 @@ impl Core
             OpMode::B       => a.b.offset != b.b.offset,
             OpMode::BA      => a.a.offset != b.b.offset,
             OpMode::AB      => a.b.offset != b.a.offset,
-            OpMode::X       => a.b.offset != b.a.offset && 
+            OpMode::X       => a.b.offset != b.a.offset &&
                                a.a.offset != b.b.offset,
             OpMode::F
-                | OpMode::I => a.a.offset != b.a.offset && 
+                | OpMode::I => a.a.offset != b.a.offset &&
                                a.b.offset != b.b.offset,
         };
 
@@ -728,10 +742,10 @@ impl Core
             OpMode::B       => a.b.offset < b.b.offset,
             OpMode::BA      => a.a.offset < b.b.offset,
             OpMode::AB      => a.b.offset < b.a.offset,
-            OpMode::X       => a.b.offset < b.a.offset && 
+            OpMode::X       => a.b.offset < b.a.offset &&
                                a.a.offset < b.b.offset,
             OpMode::F
-                | OpMode::I => a.a.offset < b.a.offset && 
+                | OpMode::I => a.a.offset < b.a.offset &&
                                a.b.offset < b.b.offset,
         };
 

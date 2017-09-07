@@ -31,8 +31,8 @@ fn print_local_core(core: &Core, margin: usize)
         max
         );
     println!("--------------------------------------------------");
-    // Scroll down
 
+    // Dump memory space
     for i in min..pc {
         println!("| {:^5} | {}", i, m[i % c_size]);
     }
@@ -50,7 +50,7 @@ const VIEW_MARGIN: usize = 3;
 fn main()
 {
     let imp = vec![ // Imp program
-        Instruction{ 
+        Instruction{
             op: OpField {
                 code:   OpCode::Mov,
                 mode:   OpMode::I
@@ -67,7 +67,7 @@ fn main()
     ];
 
     let dwarf = vec![ // Imp program
-        Instruction{ 
+        Instruction{
             op: OpField {
                 code:   OpCode::Add,
                 mode:   OpMode::AB
@@ -81,7 +81,7 @@ fn main()
                 mode:   AddressingMode::Direct
             }
         },
-        Instruction{ 
+        Instruction{
             op: OpField {
                 code:   OpCode::Mov,
                 mode:   OpMode::I
@@ -95,7 +95,7 @@ fn main()
                 mode:   AddressingMode::BIndirect
             }
         },
-        Instruction{ 
+        Instruction{
             op: OpField {
                 code:   OpCode::Jmp,
                 mode:   OpMode::I
@@ -109,7 +109,7 @@ fn main()
                 mode:   AddressingMode::Direct
             }
         },
-        Instruction{ 
+        Instruction{
             op: OpField {
                 code:   OpCode::Dat,
                 mode:   OpMode::I
@@ -142,11 +142,11 @@ fn main()
     'main: loop {
         let event = core.step();
         print_local_core(&core, VIEW_MARGIN);
-        
+
         thread::sleep(sleep_duration);
         match event {
             Ok(CoreEvent::Finished)
-                | Ok(CoreEvent::Tied) => 
+                | Ok(CoreEvent::Tied) =>
             {
                 println!("Core Terminated");
                 break 'main;

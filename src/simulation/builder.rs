@@ -25,7 +25,7 @@ pub enum BuilderError
     InvalidOffset
 }
 
-/// A `Core` builder. Provides control over how the `Core` is 
+/// A `Core` builder. Provides control over how the `Core` is
 /// configured
 #[derive(Debug, Clone)]
 pub struct CoreBuilder
@@ -69,7 +69,7 @@ impl CoreBuilder
     }
 
     /// Load programs into memory and build a `Core`
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use libcw::simulation::*;
@@ -89,9 +89,9 @@ impl CoreBuilder
     ///     core.memory().as_slice()[start..end],
     ///     program.as_slice()
     /// );
-    /// 
+    ///
     /// ```
-    pub fn load(&self, programs: Vec<(Address, Option<Pin>, Program)>) 
+    pub fn load(&self, programs: Vec<(Address, Option<Pin>, Program)>)
         -> Result<Core, BuilderError>
     {
         // create core resources
@@ -129,15 +129,15 @@ impl CoreBuilder
         // prepare process queue
         for (pid, &(base, _, _)) in programs.iter().enumerate() {
             let mut local_pq = VecDeque::new();
-            local_pq.push_front(base); 
+            local_pq.push_front(base);
             pq.push_front((pid as Pid, local_pq));
         }
 
         // this handles the case where no programs were loaded
-        let (init_pid, mut init_queue) = 
+        let (init_pid, mut init_queue) =
             pq.pop_back().unwrap_or((0 as Pid, VecDeque::new()));
 
-        let init_pc = init_queue.pop_back().unwrap_or(0 as Address); 
+        let init_pc = init_queue.pop_back().unwrap_or(0 as Address);
         let init_instr = mem[init_pc as usize];
 
         Ok(Core {
@@ -150,7 +150,7 @@ impl CoreBuilder
             process_queue: pq,
             pspace:        pspace,
             finished:      false,
-            ir:            init_instr, 
+            ir:            init_instr,
 
             // Runtime constraints
             version:       self.version,
@@ -219,7 +219,7 @@ impl CoreBuilder
     /// * `n`: number of cycles
     ///
     /// # Return
-    /// `Self` 
+    /// `Self`
     pub fn max_cycles(&mut self, n: usize) -> &mut Self
     {
         self.max_cycles = n;
@@ -262,7 +262,7 @@ impl CoreBuilder
     /// use libcw::redcode::{OpMode, OpCode, AddressingMode, Instruction};
     ///
     /// let ins = Instruction::default();
-    /// 
+    ///
     /// let core = CoreBuilder::new()
     ///     .max_length(100)
     ///     .load(vec![(0, None, vec![ins; 101])]);

@@ -4,5 +4,5 @@ pub mod redcode;
 
 pub mod simulation;
 
-// pub mod parser;
+pub mod parser;
 

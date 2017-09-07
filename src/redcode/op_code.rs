@@ -34,14 +34,14 @@ pub enum OpCode
 
     /// Jump if not zero
     Jmn,
-    
+
     /// Decrement by one and Jump if not zero
     Djn,
 
     /// Create a new execution thread at target address
     Spl,
 
-    /// Compare 
+    /// Compare
     Seq,
 
     /// Skip if not equal
@@ -56,14 +56,14 @@ pub enum OpCode
     /// Save to P-space
     Stp,
 
-    /// No operation 
+    /// No operation
     Nop
 }
 
 impl OpCode {
-    /// `Seq` is identical to `Cmp`    
+    /// `Seq` is identical to `Cmp`
     #[allow(non_upper_case_globals)]
-    pub const Cmp: OpCode = OpCode::Seq;   
+    pub const Cmp: OpCode = OpCode::Seq;
 }
 
 impl fmt::Display for OpCode
