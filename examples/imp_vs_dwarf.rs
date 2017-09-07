@@ -33,13 +33,13 @@ fn print_local_core(core: &Core, margin: usize)
     println!("--------------------------------------------------");
     // Scroll down
 
-    for i in (min..pc) {
+    for i in min..pc {
         println!("| {:^5} | {}", i, m[i % c_size]);
     }
 
     println!("|>{:^5}<| {}", pc, m[pc % c_size]);
 
-    for i in ((pc + 1)..max) {
+    for i in (pc + 1)..max {
         println!("| {:^5} | {}", i, m[i]);
     }
 }
