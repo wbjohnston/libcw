@@ -145,7 +145,7 @@ impl Core
         Ok(exec_event)
     }
 
-    /// TODO
+    /// Execute the instrcution in the `Instruction` register
     fn execute(&mut self) -> CoreEvent
     {
         let code = self.ir.op.code;
@@ -172,7 +172,8 @@ impl Core
         }
     }
 
-    /// TODO
+    /// Has the core finished its execution. This can mean either a tie has 
+    /// occurred or a warrior has emerged victoriors
     pub fn finished(&mut self) -> bool
     {
         self.finished
@@ -250,6 +251,10 @@ impl Core
     ////////////////////////////////////////////////////////////////////////////
 
     /// Calculate the address after adding an offset
+    ///
+    /// # Arguments
+    /// * `base`: base address
+    /// * `offset`: distance from base to calculate
     #[inline]
     fn calc_addr_offset(&self, base: Address, offset: Offset) -> Address
     {
@@ -260,7 +265,11 @@ impl Core
         }
     }
 
-    /// Get the effective of address of the current `Instruction`
+    /// Get the effective of address of the current `Instruction`. This takes
+    /// into account the addressing mode of the field used
+    /// 
+    /// # Arguments
+    /// * `use_a_field`: should the A field be used for calculation, or B
     #[inline]
     fn effective_addr(&self, use_a_field: bool) -> Address
     {
@@ -289,12 +298,16 @@ impl Core
     }
 
     /// Get the effective of address of the current `Instruction`'s A Field
+    ///
+    /// An alias for `Core::effective_addr(true)`
     fn effective_addr_a(&self) -> Address
     {
         self.effective_addr(true)
     }
 
-    /// TODO
+    /// Get the effective of address of the current `Instruction`'s A Field
+    ///
+    /// An alias for `Core::effective_addr(false)`
     fn effective_addr_b(&self) -> Address
     {
         self.effective_addr(false)
@@ -319,13 +332,17 @@ impl Core
     }
 
     /// Jump the program counter by an offset
+    ///
+    /// # Arguments
+    /// * `offset`: amount to jump
     fn jump_pc(&mut self, offset: Offset) -> CoreEvent
     {
         self.pc = self.calc_addr_offset(self.pc, offset);
         CoreEvent::Jumped
     }
 
-    /// Move the program counter forward
+    /// Move the program counter forward by one and then queue the program
+    /// counter onto the current queue
     fn step_and_queue_pc(&mut self) -> CoreEvent
     {
         self.step_pc();
@@ -333,7 +350,8 @@ impl Core
         CoreEvent::Stepped
     }
 
-    /// Move the program counter forward twice
+    /// Move the program counter forward twice and then queue the program
+    /// counter onto the current queue
     fn skip_and_queue_pc(&mut self) -> CoreEvent
     {
         self.skip_pc();
@@ -341,7 +359,11 @@ impl Core
         CoreEvent::Skipped
     }
 
-    /// Jump the program counter by an offset
+    /// Jump the program counter by an offset and then queue the program
+    /// count onto the current queue
+    ///
+    /// # Arguments
+    /// * `offset`: amount to jump by
     fn jump_and_queue_pc(&mut self, offset: Offset) -> CoreEvent
     {
         self.jump_pc(offset);
@@ -354,20 +376,32 @@ impl Core
     ////////////////////////////////////////////////////////////////////////////
 
     /// Store an `Instruction` in memory
+    ///
+    /// # Arguments
+    /// * `addr`: address to store
+    /// * `instr`: instruction to store
     fn store(&mut self, addr: Address, instr: Instruction)
     {
         let mem_size = self.size();
         self.memory[addr as usize % mem_size] = instr;
     }
 
-    /// TODO
+    /// Store an `Instruction` into the memory location pointed at by the A
+    /// field of the instruction loaded into the instruction register
+    ///
+    /// # Arguments
+    /// * `instr`: `Instruction` to store
     fn store_effective_a(&mut self, instr: Instruction)
     {
         let eff_addr = self.effective_addr_a();
         self.store(eff_addr, instr)
     }
 
-    /// TODO
+    /// Store an `Instruction` into the memory location pointed at by the B
+    /// field of the instruction loaded into the instruction register
+    ///
+    /// # Arguments
+    /// * `instr`: `Instruction` to store
     fn store_effective_b(&mut self, instr: Instruction)
     {
         let eff_addr = self.effective_addr_b();
@@ -375,18 +409,23 @@ impl Core
     }
 
     /// Fetch copy of instruction in memory
+    ///
+    /// # Arguments
+    /// * `addr`: adress to fetch
     fn fetch(&self, addr: Address) -> Instruction
     {
         self.memory[addr as usize % self.size()]
     }
 
-    /// TODO
+    /// Fetch copy of instruction pointed at by the A field of the instruction
+    /// loaded into the instruction register
     fn fetch_effective_a(&self) -> Instruction
     {
         self.fetch(self.effective_addr_a())
     }
 
-    /// TODO
+    /// Fetch copy of instruction pointed at by the B field of the instruction
+    /// loaded into the instruction register
     fn fetch_effective_b(&self) -> Instruction
     {
         self.fetch(self.effective_addr_b())
