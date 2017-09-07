@@ -104,6 +104,7 @@ impl Core
             let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
             let mut direct = self.fetch(direct_addr);
 
+            // FIXME: combine these into a single match statement
             match a_mode {
                 AddressingMode::AIndirectPreDecrement => direct.a.offset -= 1,
                 AddressingMode::BIndirectPreDecrement => direct.b.offset -= 1,
@@ -133,6 +134,7 @@ impl Core
             let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
             let mut direct = self.fetch(direct_addr);
 
+            // FIXME: combine these into a single match statement
             match a_mode {
                 AddressingMode::AIndirectPostIncrement => direct.a.offset += 1,
                 AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
@@ -144,8 +146,9 @@ impl Core
                 AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
                 _ => { /* Do nothing */ }
             };
+            // store result
+            self.store(direct_addr, direct);
         }
-        self.store(direct_addr, direct);
 
         // check if there are any more process queues running on the core
         if !self.current_queue.is_empty() {
