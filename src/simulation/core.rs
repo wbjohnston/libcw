@@ -92,43 +92,60 @@ impl Core
         self.ir = self.fetch(self.pc);
         let (a_mode, b_mode) = (self.ir.a.mode, self.ir.b.mode);
 
+        // PostIncrement phase
+        let predecrement = a_mode == AddressingMode::AIndirectPreDecrement ||
+            a_mode == AddressingMode::BIndirectPreDecrement ||
+            b_mode == AddressingMode::AIndirectPreDecrement ||
+            b_mode == AddressingMode::BIndirectPreDecrement;
+
         // Preincrement phase
-        // fetch direct target
-        let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
-        let mut direct = self.fetch(direct_addr);
+        if predecrement {
+            // fetch direct target
+            let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
+            let mut direct = self.fetch(direct_addr);
 
-        match a_mode {
-            AddressingMode::AIndirectPreDecrement => direct.a.offset -= 1,
-            AddressingMode::BIndirectPreDecrement => direct.b.offset -= 1,
-            _ => { /* Do nothing */ }
-        };
+            match a_mode {
+                AddressingMode::AIndirectPreDecrement => direct.a.offset -= 1,
+                AddressingMode::BIndirectPreDecrement => direct.b.offset -= 1,
+                _ => { /* Do nothing */ }
+            };
 
-        match b_mode {
-            AddressingMode::AIndirectPreDecrement => direct.a.offset -= 1,
-            AddressingMode::BIndirectPreDecrement => direct.b.offset -= 1,
-            _ => { /* Do nothing */ }
-        };
+            match b_mode {
+                AddressingMode::AIndirectPreDecrement => direct.a.offset -= 1,
+                AddressingMode::BIndirectPreDecrement => direct.b.offset -= 1,
+                _ => { /* Do nothing */ }
+            };
+            self.store(direct_addr, direct);
+        }
 
         // Execute instruction(updating the program counter and requeing it
         // are handled in this phase)
         let exec_event = self.execute();
 
         // PostIncrement phase
-        // fetch direct target
-        let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
-        let mut direct = self.fetch(direct_addr);
+        let postincrement = a_mode == AddressingMode::AIndirectPostIncrement ||
+            a_mode == AddressingMode::BIndirectPostIncrement ||
+            b_mode == AddressingMode::AIndirectPostIncrement ||
+            b_mode == AddressingMode::BIndirectPostIncrement;
 
-        match a_mode {
-            AddressingMode::AIndirectPostIncrement => direct.a.offset += 1,
-            AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
-            _ => { /* Do nothing */ }
-        };
+        if postincrement {
+            // fetch direct target
+            let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
+            let mut direct = self.fetch(direct_addr);
 
-        match b_mode {
-            AddressingMode::AIndirectPostIncrement => direct.a.offset += 1,
-            AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
-            _ => { /* Do nothing */ }
-        };
+            match a_mode {
+                AddressingMode::AIndirectPostIncrement => direct.a.offset += 1,
+                AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
+                _ => { /* Do nothing */ }
+            };
+
+            match b_mode {
+                AddressingMode::AIndirectPostIncrement => direct.a.offset += 1,
+                AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
+                _ => { /* Do nothing */ }
+            };
+        }
+        self.store(direct_addr, direct);
 
         // check if there are any more process queues running on the core
         if !self.current_queue.is_empty() {
