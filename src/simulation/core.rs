@@ -127,7 +127,8 @@ impl Core
             self.process_queue.push_front(q_entry);
         }
 
-        if self.process_queue.is_empty() && self.current_queue.is_empty() {
+        // check if there is only one PID remaining on the process queue
+        if self.process_queue.len() <= 1 {
             self.finished = true;
             return Ok(CoreEvent::Finished);
         }
@@ -253,9 +254,9 @@ impl Core
     fn calc_addr_offset(&self, base: Address, offset: Offset) -> Address
     {
         if offset < 0 {
-            (base.wrapping_sub(-offset as Address))
+            (base.wrapping_sub(-offset as Address) % self.size() as Address)
         } else {
-            (base.wrapping_add(offset as Address))
+            (base.wrapping_add(offset as Address) % self.size() as Address)
         }
     }
 
@@ -442,8 +443,8 @@ impl Core
         match self.ir.op.mode {
             OpMode::A => b.a.offset += a.a.offset,
             OpMode::B => b.b.offset += a.b.offset,
-            OpMode::AB =>b.a.offset += a.b.offset,
-            OpMode::BA =>b.b.offset += a.a.offset,
+            OpMode::BA =>b.a.offset += a.b.offset,
+            OpMode::AB =>b.b.offset += a.a.offset,
             OpMode::F 
                 | OpMode::I => {
                 b.a.offset += a.a.offset;
@@ -470,8 +471,8 @@ impl Core
         match self.ir.op.mode {
             OpMode::A => b.a.offset -= a.a.offset,
             OpMode::B => b.b.offset -= a.b.offset,
-            OpMode::AB =>b.a.offset -= a.b.offset,
-            OpMode::BA =>b.b.offset -= a.a.offset,
+            OpMode::BA =>b.a.offset -= a.b.offset,
+            OpMode::AB =>b.b.offset -= a.a.offset,
             OpMode::F 
                 | OpMode::I => {
                 b.a.offset -= a.a.offset;
@@ -498,8 +499,8 @@ impl Core
         match self.ir.op.mode {
             OpMode::A => b.a.offset *= a.a.offset,
             OpMode::B => b.b.offset *= a.b.offset,
-            OpMode::AB =>b.a.offset *= a.b.offset,
-            OpMode::BA =>b.b.offset *= a.a.offset,
+            OpMode::BA =>b.a.offset *= a.b.offset,
+            OpMode::AB =>b.b.offset *= a.a.offset,
             OpMode::F 
                 | OpMode::I => {
                 b.a.offset *= a.a.offset;
@@ -526,8 +527,8 @@ impl Core
         match self.ir.op.mode {
             OpMode::A => b.a.offset /= a.a.offset,
             OpMode::B => b.b.offset /= a.b.offset,
-            OpMode::AB =>b.a.offset /= a.b.offset,
-            OpMode::BA =>b.b.offset /= a.a.offset,
+            OpMode::BA =>b.a.offset /= a.b.offset,
+            OpMode::AB =>b.b.offset /= a.a.offset,
             OpMode::F 
                 | OpMode::I => {
                 b.a.offset /= a.a.offset;
@@ -554,8 +555,8 @@ impl Core
         match self.ir.op.mode {
             OpMode::A => b.a.offset %= a.a.offset,
             OpMode::B => b.b.offset %= a.b.offset,
-            OpMode::AB =>b.a.offset %= a.b.offset,
-            OpMode::BA =>b.b.offset %= a.a.offset,
+            OpMode::BA =>b.a.offset %= a.b.offset,
+            OpMode::AB =>b.b.offset %= a.a.offset,
             OpMode::F 
                 | OpMode::I => {
                 b.a.offset %= a.a.offset;
@@ -580,7 +581,7 @@ impl Core
             AddressingMode::Immediate
                 | AddressingMode::Direct => {
                 let offset = self.ir.a.offset;
-                self.jump_and_queue_pc(offset - 1);
+                self.jump_and_queue_pc(offset);
             }
             // TODO
             _ => unimplemented!()
@@ -640,8 +641,8 @@ impl Core
         let skip = match self.ir.op.mode {
             OpMode::A       => a.a.offset == b.b.offset,
             OpMode::B       => a.b.offset == b.b.offset,
-            OpMode::AB      => a.a.offset == b.b.offset,
-            OpMode::BA      => a.b.offset == b.a.offset,
+            OpMode::BA      => a.a.offset == b.b.offset,
+            OpMode::AB      => a.b.offset == b.a.offset,
             OpMode::X       => a.b.offset == b.a.offset && 
                                a.a.offset == b.b.offset,
             OpMode::F
@@ -663,8 +664,8 @@ impl Core
         let skip = match self.ir.op.mode {
             OpMode::A       => a.a.offset != b.b.offset,
             OpMode::B       => a.b.offset != b.b.offset,
-            OpMode::AB      => a.a.offset != b.b.offset,
-            OpMode::BA      => a.b.offset != b.a.offset,
+            OpMode::BA      => a.a.offset != b.b.offset,
+            OpMode::AB      => a.b.offset != b.a.offset,
             OpMode::X       => a.b.offset != b.a.offset && 
                                a.a.offset != b.b.offset,
             OpMode::F
@@ -686,13 +687,13 @@ impl Core
         let skip = match self.ir.op.mode {
             OpMode::A       => a.a.offset < b.b.offset,
             OpMode::B       => a.b.offset < b.b.offset,
-            OpMode::AB      => a.a.offset < b.b.offset,
-            OpMode::BA      => a.b.offset < b.a.offset,
+            OpMode::BA      => a.a.offset < b.b.offset,
+            OpMode::AB      => a.b.offset < b.a.offset,
             OpMode::X       => a.b.offset < b.a.offset && 
                                a.a.offset < b.b.offset,
             OpMode::F
                 | OpMode::I => a.a.offset < b.a.offset && 
-                               a.b.offset <= b.b.offset,
+                               a.b.offset < b.b.offset,
         };
 
         if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
