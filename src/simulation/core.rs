@@ -422,10 +422,15 @@ impl Core
     /// * `addr`: address in the pspace to store
     /// * `instr`: instruction to store
     fn store_pspace(&mut self, pin: Pin, addr: Address, instr: Instruction)
+        -> Result<(), ()>
     {
-        let mut pspace = self.pspace.get_mut(&pin).unwrap();
-        let pspace_size = pspace.len();
-        pspace[addr as usize % pspace_size] = instr;
+        if let Some(pspace) = self.pspace.get_mut(&pin) {
+            let pspace_size = pspace.len();
+            pspace[addr as usize % pspace_size] = instr;
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     /// Store an `Instruction` into the memory location pointed at by the A
@@ -464,10 +469,13 @@ impl Core
     /// # Arguments
     /// * `pin`: pin of program, used as lookup key
     /// * `addr`: address of pspace to access
-    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Instruction
+    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Result<Instruction, ()>
     {
-        let pspace = self.pspace.get(&pin).unwrap();
-        pspace[addr as usize % pspace.len()]
+        if let Some(pspace) = self.pspace.get(&pin) {
+            Ok(pspace[addr as usize % pspace.len()])
+        } else {
+            Err(())
+        }
     }
 
     /// Fetch copy of instruction pointed at by the A field of the instruction
