@@ -174,33 +174,6 @@ impl Core
         Ok(exec_event)
     }
 
-    /// Execute the instrcution in the `Instruction` register
-    fn execute(&mut self) -> CoreEvent
-    {
-        let code = self.ir.op.code;
-
-        match code {
-            OpCode::Dat => self.exec_dat(),
-            OpCode::Mov => self.exec_mov(),
-            OpCode::Add => self.exec_add(),
-            OpCode::Sub => self.exec_sub(),
-            OpCode::Mul => self.exec_mul(),
-            OpCode::Div => self.exec_div(),
-            OpCode::Mod => self.exec_mod(),
-            OpCode::Jmp => self.exec_jmp(),
-            OpCode::Jmz => self.exec_jmz(),
-            OpCode::Jmn => self.exec_jmn(),
-            OpCode::Djn => self.exec_djn(),
-            OpCode::Spl => self.exec_spl(),
-            OpCode::Seq => self.exec_seq(),
-            OpCode::Sne => self.exec_sne(),
-            OpCode::Slt => self.exec_slt(),
-            OpCode::Ldp => self.exec_ldp(),
-            OpCode::Stp => self.exec_stp(),
-            OpCode::Nop => self.exec_nop(),
-        }
-    }
-
     /// Has the core finished its execution. This can mean either a tie has
     /// occurred or a warrior has emerged victoriors
     pub fn finished(&mut self) -> bool
@@ -273,6 +246,33 @@ impl Core
     {
         // count length of all local process queues in the global pqueue
         self.process_queue.iter().fold(0, |acc, &(_, ref x)| acc + x.len())
+    }
+
+    /// Execute the instrcution in the `Instruction` register
+    fn execute(&mut self) -> CoreEvent
+    {
+        let code = self.ir.op.code;
+
+        match code {
+            OpCode::Dat => self.exec_dat(),
+            OpCode::Mov => self.exec_mov(),
+            OpCode::Add => self.exec_add(),
+            OpCode::Sub => self.exec_sub(),
+            OpCode::Mul => self.exec_mul(),
+            OpCode::Div => self.exec_div(),
+            OpCode::Mod => self.exec_mod(),
+            OpCode::Jmp => self.exec_jmp(),
+            OpCode::Jmz => self.exec_jmz(),
+            OpCode::Jmn => self.exec_jmn(),
+            OpCode::Djn => self.exec_djn(),
+            OpCode::Spl => self.exec_spl(),
+            OpCode::Seq => self.exec_seq(),
+            OpCode::Sne => self.exec_sne(),
+            OpCode::Slt => self.exec_slt(),
+            OpCode::Ldp => self.exec_ldp(),
+            OpCode::Stp => self.exec_stp(),
+            OpCode::Nop => self.exec_nop(),
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -415,6 +415,19 @@ impl Core
         self.memory[addr as usize % mem_size] = instr;
     }
 
+    /// Store an instruction in a specified pspace
+    ///
+    /// # Arguments
+    /// * `pin`: programs pin, used as a lookup key
+    /// * `addr`: address in the pspace to store
+    /// * `instr`: instruction to store
+    fn store_pspace(&mut self, pin: Pin, addr: Address, instr: Instruction)
+    {
+        let mut pspace = self.pspace.get_mut(&pin).unwrap();
+        let pspace_size = pspace.len();
+        pspace[addr as usize % pspace_size] = instr;
+    }
+
     /// Store an `Instruction` into the memory location pointed at by the A
     /// field of the instruction loaded into the instruction register
     ///
@@ -444,6 +457,17 @@ impl Core
     fn fetch(&self, addr: Address) -> Instruction
     {
         self.memory[addr as usize % self.size()]
+    }
+
+    /// Fetch an instruction from a programs private storage
+    ///
+    /// # Arguments
+    /// * `pin`: pin of program, used as lookup key
+    /// * `addr`: address of pspace to access
+    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Instruction
+    {
+        let pspace = self.pspace.get(&pin).unwrap();
+        pspace[addr as usize % pspace.len()]
     }
 
     /// Fetch copy of instruction pointed at by the A field of the instruction
@@ -507,6 +531,7 @@ impl Core
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_add(&mut self) -> CoreEvent
     {
+        // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
@@ -537,6 +562,7 @@ impl Core
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_sub(&mut self) -> CoreEvent
     {
+        // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
@@ -567,6 +593,7 @@ impl Core
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_mul(&mut self) -> CoreEvent
     {
+        // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
@@ -597,6 +624,8 @@ impl Core
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_div(&mut self) -> CoreEvent
     {
+        // TODO: math needs to be done modulo core size
+        // TODO: division by zero needs to kill the process
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
@@ -627,6 +656,8 @@ impl Core
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
     fn exec_mod(&mut self) -> CoreEvent
     {
+        // TODO: math needs to be done modulo core size
+        // TODO: division by zero needs to kill the process
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
@@ -676,7 +707,24 @@ impl Core
     /// Supported OpModes: `B`
     fn exec_jmz(&mut self) -> CoreEvent
     {
-        unimplemented!();
+        let b = self.fetch_effective_b();
+        let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
+
+        let jump = match self.ir.op.mode {
+            OpMode::A
+                | OpMode::BA => b.a.offset == 0,
+            OpMode::B
+                | OpMode::AB => b.b.offset == 0,
+            OpMode::F
+                | OpMode::I
+                | OpMode::X => b.a.offset == 0 && b.b.offset == 0,
+        };
+
+        if jump {
+            self.jump_and_queue_pc(offset)
+        } else {
+            self.step_and_queue_pc()
+        }
     }
 
     /// Execute `jmn` instruction
@@ -684,7 +732,24 @@ impl Core
     /// Supported OpModes: `B`
     fn exec_jmn(&mut self) -> CoreEvent
     {
-        unimplemented!();
+        let b = self.fetch_effective_b();
+        let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
+
+        let jump = match self.ir.op.mode {
+            OpMode::A
+                | OpMode::BA => b.a.offset != 0,
+            OpMode::B
+                | OpMode::AB => b.b.offset != 0,
+            OpMode::F
+                | OpMode::I
+                | OpMode::X => b.a.offset != 0 && b.b.offset != 0,
+        };
+
+        if jump {
+            self.jump_and_queue_pc(offset)
+        } else {
+            self.step_and_queue_pc()
+        }
     }
 
     /// Execute `djn` instruction
@@ -692,7 +757,24 @@ impl Core
     /// Supported OpModes: `B`
     fn exec_djn(&mut self) -> CoreEvent
     {
-        unimplemented!();
+        // predecrement the instruction before checking if its not zero
+        let mut b = self.fetch_effective_b();
+        match self.ir.op.mode {
+            OpMode::A
+                | OpMode::BA => b.a.offset -= 1,
+            OpMode::B
+                | OpMode::AB => b.b.offset -= 1,
+            OpMode::F
+                | OpMode::I
+                | OpMode::X =>
+            {
+                b.a.offset -= 1;
+                b.b.offset -= 1;
+            }
+        }
+        self.store_effective_b(b);
+
+        self.exec_jmn()
     }
 
     /// Execute `spl` instruction
