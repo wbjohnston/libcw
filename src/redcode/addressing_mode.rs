@@ -1,4 +1,6 @@
 
+ use std::fmt;
+
 /// Field Addressing mode: controls how the `offset` behaves
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddressingMode
@@ -46,5 +48,24 @@ pub enum AddressingMode
     ///
     /// Denoted by: `>`
     BIndirectPostIncrement,
+}
+
+impl fmt::Display for AddressingMode
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        let out = match *self {
+            AddressingMode::Immediate              => "#",
+            AddressingMode::Direct                 => " ",
+            AddressingMode::AIndirect              => "*",
+            AddressingMode::AIndirectPreDecrement  => "{",
+            AddressingMode::AIndirectPostIncrement => "}",
+            AddressingMode::BIndirect              => "@",
+            AddressingMode::BIndirectPreDecrement  => "<",
+            AddressingMode::BIndirectPostIncrement => ">"
+        };
+
+        write!(f, "{}", out)
+    }
 }
 

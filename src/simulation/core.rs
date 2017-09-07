@@ -580,7 +580,7 @@ impl Core
             AddressingMode::Immediate
                 | AddressingMode::Direct => {
                 let offset = self.ir.a.offset;
-                self.jump_and_queue_pc(offset);
+                self.jump_and_queue_pc(offset - 1);
             }
             // TODO
             _ => unimplemented!()

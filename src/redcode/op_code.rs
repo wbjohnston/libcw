@@ -1,4 +1,6 @@
 
+use std::fmt;
+
 /// Operations that a redcode processor can perform
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OpCode
@@ -62,5 +64,34 @@ impl OpCode {
     /// `Seq` is identical to `Cmp`    
     #[allow(non_upper_case_globals)]
     pub const Cmp: OpCode = OpCode::Seq;   
+}
+
+impl fmt::Display for OpCode
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        let out = match *self {
+            OpCode::Dat => "DAT",
+            OpCode::Mov => "MOV",
+            OpCode::Add => "ADD",
+            OpCode::Sub => "SUB",
+            OpCode::Mul => "MUL",
+            OpCode::Div => "DIV",
+            OpCode::Mod => "MOD",
+            OpCode::Jmp => "JMP",
+            OpCode::Jmz => "JMZ",
+            OpCode::Jmn => "JMN",
+            OpCode::Djn => "DJN",
+            OpCode::Spl => "SPL",
+            OpCode::Seq => "SEQ",
+            OpCode::Sne => "SNE",
+            OpCode::Slt => "SLT",
+            OpCode::Ldp => "LDP",
+            OpCode::Stp => "STP",
+            OpCode::Nop => "NOP"
+        };
+
+        write!(f, "{}", out)
+    }
 }
 

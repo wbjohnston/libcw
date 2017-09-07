@@ -67,15 +67,40 @@ fn main()
 
     let mut core = CoreBuilder::new()
         .core_size(8)
+        .max_cycles(8)
         .load(vec![(0, None, dwarf)]).unwrap();
 
-    for i in 0..4 {
-        let sim_result = core.step();
+    println!("INITIAL STATE START");
+    for (i, instr) in core.memory().iter().enumerate() {
+        if i as Address == core.pc() {
+            println!("PC> {:?}", instr);
+        } else {
+            println!("    {:?}", instr);
+        }
+    }
+    println!("INITIAL STATE END");
 
-        println!("START STEP {}", i);
-        for instr in core.memory() {
-            println!("{:?}", instr);
+    let mut events = vec![];
+
+    for i in 0.. {
+        events.push(core.step());
+
+        /// print out core
+        println!("START STEP {}", core.cycle());
+        for (i, instr) in core.memory().iter().enumerate() {
+            if i as Address == core.pc() {
+                println!("PC> {:?}", instr);
+            } else {
+                println!("    {:?}", instr);
+            }
         }
         println!("END STEP {}", i);
+
+        if core.finished() {
+            println!("TERMINATED");
+            break;
+        }
     }
+
+    println!("Events: {:?}", events);
 }
