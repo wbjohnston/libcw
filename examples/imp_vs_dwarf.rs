@@ -45,7 +45,7 @@ fn print_local_core(core: &Core, margin: usize)
 }
 
 const SLEEP_TIME_MS: u64 = 1000;
-const VIEW_MARGIN: usize = 3;
+const VIEW_MARGIN: usize = 8;
 
 fn main()
 {
@@ -129,10 +129,10 @@ fn main()
 
     // Create a core with our programs in it
     let mut core = CoreBuilder::new()
-        .core_size(128)
+        .max_cycles(100)
         .load(vec![
-            (64, None, dwarf.clone()),
-            (00, None, imp.clone()),
+            (00, None, imp.clone()  ),
+            (4000, None, dwarf.clone()),
         ])
         .unwrap();
 
@@ -143,7 +143,7 @@ fn main()
         let event = core.step();
         print_local_core(&core, VIEW_MARGIN);
 
-        thread::sleep(sleep_duration);
+        // thread::sleep(sleep_duration);
         match event {
             Ok(CoreEvent::Finished)
                 | Ok(CoreEvent::Tied) =>

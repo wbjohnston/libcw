@@ -101,22 +101,25 @@ impl Core
         // Preincrement phase
         if predecrement {
             // fetch direct target
-            let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
-            let mut direct = self.fetch(direct_addr);
+            let a_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
+            let b_addr = self.calc_addr_offset(self.pc, self.ir.b.offset);
+            let mut a = self.fetch(a_addr);
+            let mut b = self.fetch(b_addr);
 
             // FIXME: combine these into a single match statement
             match a_mode {
-                AddressingMode::AIndirectPreDecrement => direct.a.offset -= 1,
-                AddressingMode::BIndirectPreDecrement => direct.b.offset -= 1,
+                AddressingMode::AIndirectPreDecrement => a.a.offset -= 1,
+                AddressingMode::BIndirectPreDecrement => a.b.offset -= 1,
                 _ => { /* Do nothing */ }
             };
 
             match b_mode {
-                AddressingMode::AIndirectPreDecrement => direct.a.offset -= 1,
-                AddressingMode::BIndirectPreDecrement => direct.b.offset -= 1,
+                AddressingMode::AIndirectPreDecrement => b.a.offset -= 1,
+                AddressingMode::BIndirectPreDecrement => b.b.offset -= 1,
                 _ => { /* Do nothing */ }
             };
-            self.store(direct_addr, direct);
+            self.store(a_addr, a);
+            self.store(b_addr, b);
         }
 
         // Execute instruction(updating the program counter and requeing it
@@ -131,23 +134,26 @@ impl Core
 
         if postincrement {
             // fetch direct target
-            let direct_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
-            let mut direct = self.fetch(direct_addr);
+            let a_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
+            let b_addr = self.calc_addr_offset(self.pc, self.ir.b.offset);
+            let mut a = self.fetch(a_addr);
+            let mut b = self.fetch(b_addr);
 
             // FIXME: combine these into a single match statement
             match a_mode {
-                AddressingMode::AIndirectPostIncrement => direct.a.offset += 1,
-                AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
+                AddressingMode::AIndirectPostIncrement => a.a.offset += 1,
+                AddressingMode::BIndirectPostIncrement => a.b.offset += 1,
                 _ => { /* Do nothing */ }
             };
 
             match b_mode {
-                AddressingMode::AIndirectPostIncrement => direct.a.offset += 1,
-                AddressingMode::BIndirectPostIncrement => direct.b.offset += 1,
+                AddressingMode::AIndirectPostIncrement => b.a.offset += 1,
+                AddressingMode::BIndirectPostIncrement => b.b.offset += 1,
                 _ => { /* Do nothing */ }
             };
             // store result
-            self.store(direct_addr, direct);
+            self.store(a_addr, a);
+            self.store(b_addr, b);
         }
 
         // check if there are any more process queues running on the core
@@ -208,7 +214,9 @@ impl Core
     /// Get all `Pid`s that are currently active
     pub fn pids(&self) -> Vec<Pid>
     {
-        self.process_queue.iter().map(|&(pid, _)| pid).collect()
+        let mut pids = vec![self.pid()];
+        pids.extend(self.process_queue.iter().map(|&(pid, _)| pid));
+        pids
     }
 
     /// Size of memory
@@ -544,20 +552,20 @@ impl Core
         let mut b = self.fetch_effective_b();
 
         match self.ir.op.mode {
-            OpMode::A => b.a.offset += a.a.offset,
-            OpMode::B => b.b.offset += a.b.offset,
-            OpMode::BA =>b.a.offset += a.b.offset,
-            OpMode::AB =>b.b.offset += a.a.offset,
+            OpMode::A  => b.a.offset = (b.a.offset + a.a.offset) % self.size() as Offset,
+            OpMode::B  => b.b.offset = (b.b.offset + a.b.offset) % self.size() as Offset,
+            OpMode::BA => b.a.offset = (b.a.offset + a.b.offset) % self.size() as Offset,
+            OpMode::AB => b.b.offset = (b.b.offset + a.a.offset) % self.size() as Offset,
             OpMode::F
                 | OpMode::I =>
             {
-                b.a.offset += a.a.offset;
-                b.b.offset += a.b.offset;
+                b.a.offset = (b.a.offset + a.a.offset) % self.size() as Offset;
+                b.b.offset = (b.b.offset + a.b.offset) % self.size() as Offset;
             },
             OpMode::X =>
             {
-                b.b.offset += a.a.offset;
-                b.a.offset += a.b.offset;
+                b.b.offset = (b.b.offset + a.a.offset) % self.size() as Offset;
+                b.a.offset = (b.a.offset + a.b.offset) % self.size() as Offset;
             },
         }
 
