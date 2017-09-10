@@ -1,10 +1,21 @@
 //! Simulation runtime (aka `Core`) and tools to build a core
 
+use std::iter::FromIterator;
 use std::collections::{VecDeque, HashMap};
 
 use redcode::*;
 
 pub type CoreResult<T> = Result<T, ()>;
+
+/*
+ * Design things to do:
+ *  * Modify local process queue to add another pid. All processes will be
+ *  queued with their own pid. This lets us say child process 10 of process
+ *  2 terminated. 
+ *  * I'm not super happy with the fields in `Core`, need to determine if all
+ *  of these fields are necessary
+ *  * Implement iterator for `Core`
+ */
 
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -77,6 +88,40 @@ pub struct Core
 impl Core
 {
     /// Step forward one cycle
+    ///
+    /// # Examples
+    /// ```
+    /// use libcw::simulation::{CoreBuilder, CoreEvent};
+    /// use libcw::redcode::*;
+    ///
+    /// let imp = vec![
+    ///     Instruction {
+    ///         op: OpField {
+    ///             code: OpCode::Mov,
+    ///             mode: OpMode::I
+    ///         },
+    ///         a: Field {
+    ///             offset: 0,
+    ///             mode: AddressingMode::Direct,
+    ///         },
+    ///         b: Field {
+    ///             offset: 1,
+    ///             mode: AddressingMode::Direct
+    ///         }
+    ///     },
+    /// ];
+    ///
+    /// let mut core = CoreBuilder::new().load(vec![
+    ///     (0, None, imp.clone()),
+    ///     (4000, None, imp.clone())
+    ///     ])
+    ///     .unwrap();
+    ///
+    /// // Stepping the core forward will step the pc forward 1
+    /// let event = core.step();
+    /// assert_eq!(Ok(CoreEvent::Stepped), event);
+    ///
+    /// ```
     pub fn step(&mut self) -> CoreResult<CoreEvent>
     {
         if self.finished() { // can't step after the core is halted
@@ -182,36 +227,192 @@ impl Core
 
     /// Has the core finished its execution. This can mean either a tie has
     /// occurred or a warrior has emerged victoriors
+    ///
+    /// # Examples
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    ///
+    /// // load no programs, meaning that the core is already finished
+    /// let mut core = CoreBuilder::new().load(vec![]).unwrap();
+    ///
+    /// assert_eq!(true, core.finished());
+    /// 
+    /// // stepping the core after it has finished results in an error
+    /// assert_eq!(Err(()), core.step());
+    ///
+    /// ```
     pub fn finished(&mut self) -> bool
     {
         self.finished
     }
 
     /// Get `Pid` currently executing on the core
+    /// # Example
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    /// use libcw::redcode::*;
+    ///
+    /// let imp = vec![
+    ///     Instruction {
+    ///         op: OpField {
+    ///             code: OpCode::Mov,
+    ///             mode: OpMode::I
+    ///         },
+    ///         a: Field {
+    ///             offset: 0,
+    ///             mode: AddressingMode::Direct,
+    ///         },
+    ///         b: Field {
+    ///             offset: 1,
+    ///             mode: AddressingMode::Direct
+    ///         }
+    ///     },
+    /// ];
+    ///
+    /// let mut core = CoreBuilder::new().load(vec![
+    ///     (0, None, imp.clone()),
+    ///     (4000, None, imp.clone())
+    ///     ])
+    ///     .unwrap();
+    ///
+    /// // inital program counter is 0, first program was loaded in at address 0
+    /// assert_eq!(0, core.pc());
+    /// let _ = core.step();
+    /// // Goes to next processes's program counter 
+    /// assert_eq!(4000, core.pc());
+    /// ```
+    ///
     pub fn pc(&self) -> Address
     {
-        self.pc.clone()
+        self.pc
     }
 
     /// Get the program counters for all processes
-    pub fn pcs(&self) -> Vec<Address>
+    pub fn pcs(&self) -> Vec<(Pid, Address)>
     {
         unimplemented!();
     }
 
     /// Current cycle core is executing
+    ///
+    /// # Examples
+    /// ```
+    /// use libcw::simulation::{CoreBuilder, CoreEvent};
+    /// use libcw::redcode::*;
+    ///
+    /// let imp = vec![
+    ///     Instruction {
+    ///         op: OpField {
+    ///             code: OpCode::Mov,
+    ///             mode: OpMode::I
+    ///         },
+    ///         a: Field {
+    ///             offset: 0,
+    ///             mode: AddressingMode::Direct,
+    ///         },
+    ///         b: Field {
+    ///             offset: 1,
+    ///             mode: AddressingMode::Direct
+    ///         }
+    ///     },
+    /// ];
+    ///
+    /// let mut core = CoreBuilder::new().load(vec![
+    ///     (0, None, imp.clone()),
+    ///     (4000, None, imp.clone())
+    ///     ])
+    ///     .unwrap();
+    ///
+    /// // initial cycle is 0
+    /// assert_eq!(0, core.cycle());
+    /// let _ = core.step();
+    /// // We're on the next cycle now
+    /// assert_eq!(1, core.cycle());
+    /// ```
     pub fn cycle(&self) -> usize
     {
         self.current_cycle
     }
 
     /// Get the current `Pid` executing
+    ///
+    /// # Example
+    /// ```
+    /// use libcw::simulation::{CoreBuilder, CoreEvent};
+    /// use libcw::redcode::*;
+    ///
+    /// let imp = vec![
+    ///     Instruction {
+    ///         op: OpField {
+    ///             code: OpCode::Mov,
+    ///             mode: OpMode::I
+    ///         },
+    ///         a: Field {
+    ///             offset: 0,
+    ///             mode: AddressingMode::Direct,
+    ///         },
+    ///         b: Field {
+    ///             offset: 1,
+    ///             mode: AddressingMode::Direct
+    ///         }
+    ///     },
+    /// ];
+    ///
+    /// let mut core = CoreBuilder::new().load(vec![
+    ///     (0, None, imp.clone()),
+    ///     (4000, None, imp.clone())
+    ///     ])
+    ///     .unwrap();
+    ///
+    /// // initial pid executing is 0
+    /// assert_eq!(0, core.pid());
+    /// let _ = core.step();
+    /// // Next pid is 0
+    /// assert_eq!(1, core.pid());
+    /// ```
     pub fn pid(&self) -> Pid
     {
         self.current_pid
     }
 
-    /// Get all `Pid`s that are currently active
+    /// Get all `Pid`s that are currently active in the order they will be 
+    /// executing
+    ///
+    /// # Example
+    /// ```
+    /// use std::collections::HashSet;
+    /// use libcw::simulation::CoreBuilder;
+    /// use libcw::redcode::*;
+    ///
+    /// let imp = vec![
+    ///     Instruction {
+    ///         op: OpField {
+    ///             code: OpCode::Mov,
+    ///             mode: OpMode::I
+    ///         },
+    ///         a: Field {
+    ///             offset: 0,
+    ///             mode: AddressingMode::Direct,
+    ///         },
+    ///         b: Field {
+    ///             offset: 1,
+    ///             mode: AddressingMode::Direct
+    ///         }
+    ///     },
+    /// ];
+    ///
+    /// let mut core = CoreBuilder::new().load(vec![
+    ///     (0, None, imp.clone()),
+    ///     (4000, None, imp.clone())
+    ///     ])
+    ///     .unwrap();
+    ///
+    /// // Two programs were loaded, so two pids are running, 0 is next to exec
+    /// assert_eq!(vec![0, 1], core.pids());
+    /// let _ = core.step();
+    /// // There are still 2 pids executing on the core, but 1 is the current
+    /// assert_eq!(vec![1, 0], core.pids());
+    /// ```
     pub fn pids(&self) -> Vec<Pid>
     {
         let mut pids = vec![self.pid()];
@@ -220,24 +421,73 @@ impl Core
     }
 
     /// Size of memory
+    ///
+    /// # Example
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    ///
+    /// let core = CoreBuilder::new()
+    ///     .core_size(100)
+    ///     .load(vec![])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(core.size(), 100);
+    /// ```
     pub fn size(&self) -> usize
     {
         self.memory.len()
     }
 
     /// Version of core multiplied by `100`
+    ///
+    /// # Example
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    ///
+    /// let core = CoreBuilder::new()
+    ///     .version(800)
+    ///     .load(vec![])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(core.version(), 800);
+    /// ```
     pub fn version(&self) -> usize
     {
         self.version
     }
 
     /// Maximum number of processes that can be in the core queue
+    ///
+    /// # Example
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    ///
+    /// let core = CoreBuilder::new()
+    ///     .max_processes(800)
+    ///     .load(vec![])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(core.max_processes(), 800);
+    /// ```
     pub fn max_processes(&self) -> usize
     {
         self.max_processes
     }
 
     /// Maximum number of cycles before a tie is declared
+    ///
+    /// # Example
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    ///
+    /// let core = CoreBuilder::new()
+    ///     .max_cycles(800)
+    ///     .load(vec![])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(core.max_cycles(), 800);
+    /// // TODO: test that tie happens at this number
+    /// ```
     pub fn max_cycles(&self) -> usize
     {
         self.max_cycles
@@ -250,10 +500,42 @@ impl Core
     }
 
     /// Get the number of processes currently running
+    ///
+    /// # Example
+    /// ```
+    /// use libcw::simulation::CoreBuilder;
+    /// use libcw::redcode::*;
+    ///
+    /// let imp = vec![
+    ///     Instruction {
+    ///         op: OpField {
+    ///             code: OpCode::Mov,
+    ///             mode: OpMode::I
+    ///         },
+    ///         a: Field {
+    ///             offset: 0,
+    ///             mode: AddressingMode::Direct,
+    ///         },
+    ///         b: Field {
+    ///             offset: 1,
+    ///             mode: AddressingMode::Direct
+    ///         }
+    ///     },
+    /// ];
+    ///
+    /// let mut core = CoreBuilder::new().load(vec![
+    ///     (0, None, imp.clone()),
+    ///     (4000, None, imp.clone())
+    ///     ])
+    ///     .unwrap();
+    ///
+    /// assert_eq!(2, core.process_count());
+    /// // TODO: test splitting + test terminating
+    /// ```
     pub fn process_count(&self) -> usize
     {
         // count length of all local process queues in the global pqueue
-        self.process_queue.iter().fold(0, |acc, &(_, ref x)| acc + x.len())
+        self.process_queue.iter().fold(1, |acc, &(_, ref x)| acc + x.len())
     }
 
     /// Execute the instrcution in the `Instruction` register

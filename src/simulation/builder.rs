@@ -149,7 +149,7 @@ impl CoreBuilder
             pc:            init_pc,
             process_queue: pq,
             pspace:        pspace,
-            finished:      false,
+            finished:      programs.len() <= 1,
             ir:            init_instr,
 
             // Runtime constraints

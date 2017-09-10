@@ -131,8 +131,8 @@ fn main()
     let mut core = CoreBuilder::new()
         .max_cycles(100)
         .load(vec![
-            (00, None, imp.clone()  ),
-            (4000, None, dwarf.clone()),
+            (2000, None, imp.clone()  ),
+            (6000, None, dwarf.clone()),
         ])
         .unwrap();
 
@@ -143,7 +143,7 @@ fn main()
         let event = core.step();
         print_local_core(&core, VIEW_MARGIN);
 
-        // thread::sleep(sleep_duration);
+        thread::sleep(sleep_duration);
         match event {
             Ok(CoreEvent::Finished)
                 | Ok(CoreEvent::Tied) =>
