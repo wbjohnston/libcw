@@ -130,7 +130,7 @@ fn main()
     // Create a core with our programs in it
     let mut core = CoreBuilder::new()
         .max_cycles(100)
-        .load(vec![
+        .build_and_load(vec![
             (2000, None, imp.clone()  ),
             (6000, None, dwarf.clone()),
         ])

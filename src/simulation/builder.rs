@@ -2,7 +2,7 @@
 
 use std::collections::{VecDeque, HashMap};
 
-use redcode::{Instruction, Program, Address, Pin, Pid};
+use redcode::{Instruction, Pin, Address, Program};
 use simulation::Core;
 
 // Core defaults
@@ -68,6 +68,17 @@ impl CoreBuilder
         }
     }
 
+    /// Build a core and load it with specified programs
+    pub fn build_and_load(&self, programs: Vec<(Address, Option<Pin>, Program)>) 
+        -> Result<Core, ()>
+    {
+        let mut core = self.build();
+        if programs.len() > 0 {
+            core.reset(programs)?;
+        }
+        Ok(core)
+    }
+
     /// Load programs into memory and build a `Core`
     ///
     /// # Examples
@@ -80,7 +91,7 @@ impl CoreBuilder
     /// let starting_address = 2; // program will be loaded at this addr
     /// let core = CoreBuilder::new()
     ///     .core_size(8)
-    ///     .load(vec![(starting_address, None, program.clone())])
+    ///     .build_and_load(vec![(starting_address, None, program.clone())])
     ///     .unwrap();
     ///
     ///let (start, end) = (starting_address, starting_address + program.len());
@@ -91,72 +102,34 @@ impl CoreBuilder
     /// );
     ///
     /// ```
-    pub fn load(&self, programs: Vec<(Address, Option<Pin>, Program)>)
-        -> Result<Core, BuilderError>
+    pub fn build(&self) -> Core
     {
         // create core resources
-        let mut mem = vec![Instruction::default(); self.core_size];
-        let mut pq  = VecDeque::new();
-        let mut pspace  = HashMap::new();
+        let mem = vec![Instruction::default(); self.core_size];
+        let pq  = VecDeque::new();
+        let pspace  = HashMap::new();
 
-        //constraint validation
-        let all_valid_length = programs.iter()
-            // .map(|&(_, _, ref prog)| prog.len())
-            .fold(
-                true,
-                |acc, &(_, _, ref prog)| acc && prog.len() <= self.max_length
-            );
-
-        if !all_valid_length {
-            return Err(BuilderError::ProgramTooLong);
-        }
-
-        // FIXME: compress this into a single loop
-        // prepare memory
-        for &(base, _, ref program) in programs.iter() {
-            // copy program into memory
-            for i in 0..program.len() {
-                mem[base as usize + i] = program[i];
-            }
-        }
-
-        // prepare pspace
-        for (pid, &(_, maybe_pin, _)) in programs.iter().enumerate() {
-            let pin = maybe_pin.unwrap_or(pid as Pin);
-            pspace.insert(pin, vec![Instruction::default(); self.pspace_size]);
-        }
-
-        // prepare process queue
-        for (pid, &(base, _, _)) in programs.iter().enumerate() {
-            let mut local_pq = VecDeque::new();
-            local_pq.push_front(base);
-            pq.push_front((pid as Pid, local_pq));
-        }
-
-        // this handles the case where no programs were loaded
-        let (init_pid, mut init_queue) =
-            pq.pop_back().unwrap_or((0 as Pid, VecDeque::new()));
-
-        let init_pc = init_queue.pop_back().unwrap_or(0 as Address);
-        let init_instr = mem[init_pc as usize];
-
-        Ok(Core {
+        Core {
             // Runtime data
             memory:        mem,
-            current_pid:   init_pid,
-            current_queue: init_queue,
+            current_pid:   0,
+            current_queue: VecDeque::new(),
             current_cycle: 0,
-            pc:            init_pc,
+            pc:            0,
             process_queue: pq,
             pspace:        pspace,
-            finished:      programs.len() <= 1,
-            ir:            init_instr,
+            finished:      false,
+            ir:            Instruction::default(),
+
+            // Load constraints
+            max_length:    self.max_length,
+            pspace_size:   self.pspace_size,
 
             // Runtime constraints
             version:       self.version,
             max_processes: self.max_processes,
             max_cycles:    self.max_cycles,
-        })
+        }
     }
 
     /// Size of memory
@@ -167,7 +140,7 @@ impl CoreBuilder
     ///
     /// let core = CoreBuilder::new()
     ///     .core_size(80)
-    ///     .load(vec![])
+    ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
     /// assert_eq!(core.size(), 80);
@@ -209,7 +182,7 @@ impl CoreBuilder
     ///
     /// let core = CoreBuilder::new()
     ///     .max_cycles(100)
-    ///     .load(vec![])
+    ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
     /// assert_eq!(100, core.max_cycles());
@@ -233,7 +206,7 @@ impl CoreBuilder
     /// use libcw::simulation::CoreBuilder;
     /// let core = CoreBuilder::new()
     ///     .max_processes(10)
-    ///     .load(vec![])
+    ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
     /// assert_eq!(10, core.max_processes());
@@ -265,9 +238,9 @@ impl CoreBuilder
     ///
     /// let core = CoreBuilder::new()
     ///     .max_length(100)
-    ///     .load(vec![(0, None, vec![ins; 101])]);
+    ///     .build_and_load(vec![(0, None, vec![ins; 101])]);
     ///
-    /// assert_eq!(Err(BuilderError::ProgramTooLong), core);
+    /// assert_eq!(Err(()), core);
     /// ```
     ///
     /// # Arguments

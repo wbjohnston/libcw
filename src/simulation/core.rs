@@ -74,6 +74,12 @@ pub struct Core
     /// Has the core finished executing
     pub(super) finished:      bool,
 
+    // Load constraints
+    pub(super) max_length:    usize,
+
+    /// Size of P-space
+    pub(super) pspace_size:   usize,
+
     // Runtime constraints
     /// Core version
     pub(super) version:       usize,
@@ -111,9 +117,10 @@ impl Core
     ///     },
     /// ];
     ///
-    /// let mut core = CoreBuilder::new().load(vec![
-    ///     (0, None, imp.clone()),
-    ///     (4000, None, imp.clone())
+    /// let mut core = CoreBuilder::new()
+    ///     .build_and_load(vec![
+    ///         (0, None, imp.clone()),
+    ///         (4000, None, imp.clone())
     ///     ])
     ///     .unwrap();
     ///
@@ -233,7 +240,8 @@ impl Core
     /// use libcw::simulation::CoreBuilder;
     ///
     /// // load no programs, meaning that the core is already finished
-    /// let mut core = CoreBuilder::new().load(vec![]).unwrap();
+    /// let mut core = CoreBuilder::new().build_and_load(vec![]).unwrap();
+    /// core.halt();
     ///
     /// assert_eq!(true, core.finished());
     /// 
@@ -244,6 +252,101 @@ impl Core
     pub fn finished(&mut self) -> bool
     {
         self.finished
+    }
+
+    pub fn halt(&mut self) -> &mut Self
+    {
+        self.finished = true;
+        self
+    }
+
+    /// Reset the core
+    ///
+    /// # Arguments
+    /// * `programs`: programs packed with pins and base load address
+    pub fn reset(&mut self, programs: Vec<(Address, Option<Pin>, Program)>)
+        -> Result<(), ()>
+    {
+        self.validate(&programs)?;
+
+        // reset all assets
+        self.process_queue.clear();
+        self.current_cycle = 0;
+
+        // reset memory
+        for e in self.memory.iter_mut() {
+            *e = Instruction::default()
+        }
+
+        // reload programs
+        for &(base, _, ref prog) in programs.iter() {
+            // copy into memory
+            for i in 0..prog.len() {
+                self.memory[i + base as usize] = prog[i];
+            }
+        }
+
+        // Reload process queue
+        for (i, &(base, _, _)) in programs.iter().enumerate() {
+            let pid = i as Pid; 
+            let mut q = VecDeque::new();
+            q.push_front(base);
+
+            let q_entry = (pid, q);
+            self.process_queue.push_front(q_entry);
+        }
+
+        // Prepare current queue
+        let (pid, curr_q) = self.process_queue.pop_back()
+            .unwrap_or((0, VecDeque::new()));
+
+        self.current_pid = pid;
+        self.current_queue = curr_q;
+        self.pc = self.current_queue.pop_back().unwrap_or(0);
+        self.finished = false;
+
+        Ok(())
+    }
+
+    pub fn reset_hard(&mut self, programs: Vec<(Address, Option<Pin>, Program)>)
+        -> Result<(), ()>
+    {
+        // Reset pspace
+        self.pspace.clear();
+
+        for (i, &(_, maybe_pin, _)) in programs.iter().enumerate() {
+            let pin = maybe_pin.unwrap_or(i as Pin);
+
+            self.pspace.insert(
+                pin,
+                vec![Instruction::default(); self.pspace_size]
+                );
+        }
+
+        self.reset(programs)
+    }
+
+    /// Validate that programs do not violate runtime constraints
+    ///
+    /// # Arguments
+    /// * `programs`:
+    fn validate(&self, programs: &Vec<(Address, Option<Pin>, Program)>)
+        -> Result<(), ()>
+    {
+        let all_valid_length = programs.iter()
+            .any(|&(_, _, ref prog)| prog.len() <= self.max_length);
+
+        if !all_valid_length {
+            return Err(());
+        }
+
+        // TODO: actually check spacing
+        let valid_spacing = true;
+        if !valid_spacing {
+            return Err(());
+        }
+
+        Ok(())
     }
 
     /// Get `Pid` currently executing on the core
@@ -269,7 +372,7 @@ impl Core
     ///     },
     /// ];
     ///
-    /// let mut core = CoreBuilder::new().load(vec![
+    /// let mut core = CoreBuilder::new().build_and_load(vec![
     ///     (0, None, imp.clone()),
     ///     (4000, None, imp.clone())
     ///     ])
@@ -317,7 +420,7 @@ impl Core
     ///     },
     /// ];
     ///
-    /// let mut core = CoreBuilder::new().load(vec![
+    /// let mut core = CoreBuilder::new().build_and_load(vec![
     ///     (0, None, imp.clone()),
     ///     (4000, None, imp.clone())
     ///     ])
@@ -358,7 +461,7 @@ impl Core
     ///     },
     /// ];
     ///
-    /// let mut core = CoreBuilder::new().load(vec![
+    /// let mut core = CoreBuilder::new().build_and_load(vec![
     ///     (0, None, imp.clone()),
     ///     (4000, None, imp.clone())
     ///     ])
@@ -401,7 +504,7 @@ impl Core
     ///     },
     /// ];
     ///
-    /// let mut core = CoreBuilder::new().load(vec![
+    /// let mut core = CoreBuilder::new().build_and_load(vec![
     ///     (0, None, imp.clone()),
     ///     (4000, None, imp.clone())
     ///     ])
@@ -428,7 +531,7 @@ impl Core
     ///
     /// let core = CoreBuilder::new()
     ///     .core_size(100)
-    ///     .load(vec![])
+    ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
     /// assert_eq!(core.size(), 100);
@@ -446,7 +549,7 @@ impl Core
     ///
     /// let core = CoreBuilder::new()
     ///     .version(800)
-    ///     .load(vec![])
+    ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
     /// assert_eq!(core.version(), 800);
@@ -464,7 +567,7 @@ impl Core
     ///
     /// let core = CoreBuilder::new()
     ///     .max_processes(800)
-    ///     .load(vec![])
+    ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
     /// assert_eq!(core.max_processes(), 800);
@@ -482,7 +585,7 @@ impl Core
     ///
     /// let core = CoreBuilder::new()
     ///     .max_cycles(800)
-    ///     .load(vec![])
+    ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
     /// assert_eq!(core.max_cycles(), 800);
@@ -523,7 +626,7 @@ impl Core
     ///     },
     /// ];
     ///
-    /// let mut core = CoreBuilder::new().load(vec![
+    /// let mut core = CoreBuilder::new().build_and_load(vec![
     ///     (0, None, imp.clone()),
     ///     (4000, None, imp.clone())
     ///     ])

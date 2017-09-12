@@ -26,7 +26,7 @@ fn main()
     let mut core = CoreBuilder::new()
         .max_cycles(10)
         .core_size(8)
-        .load(vec![(0, None, imp.clone()), (4, None, imp.clone())])
+        .build_and_load(vec![(0, None, imp.clone()), (4, None, imp.clone())])
         .unwrap();
 
     println!("INITIAL STATE START");

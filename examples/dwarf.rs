@@ -68,7 +68,7 @@ fn main()
     let mut core = CoreBuilder::new()
         .core_size(8)
         .max_cycles(8)
-        .load(vec![(0, None, dwarf)]).unwrap();
+        .build_and_load(vec![(0, None, dwarf)]).unwrap();
 
     println!("INITIAL STATE START");
     for (i, instr) in core.memory().iter().enumerate() {
