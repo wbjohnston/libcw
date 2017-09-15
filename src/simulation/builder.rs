@@ -1,11 +1,11 @@
-//! Utility struct for builder `Core`s
+//! Utility struct for builder `Mars`s
 
 use std::collections::{VecDeque, HashMap};
 
 use redcode::{Instruction, Pin, Address, Program};
-use simulation::Core;
+use simulation::Mars;
 
-// Core defaults
+// Mars defaults
 const DEFAULT_CORE_SIZE: usize     = 8000;
 const DEFAULT_PSPACE_SIZE: usize   = 500;
 const DEFAULT_MAX_CYCLES: usize    = 80000;
@@ -14,21 +14,21 @@ const DEFAULT_MAX_LENGTH: usize    = 100;
 const DEFAULT_MIN_DISTANCE: usize  = 100;
 const DEFAULT_VERSION: usize       = 80; // FIXME: hmmm
 
-/// Errors that can occur from invalid `CoreBuilder` configuration
+/// Errors that can occur from invalid `MarsBuilder` configuration
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BuilderError
 {
     /// Program is longer than the core allows
     ProgramTooLong,
 
-    /// A provided offset would violate a constraint of the `Core`
+    /// A provided offset would violate a constraint of the `Mars`
     InvalidOffset
 }
 
-/// A `Core` builder. Provides control over how the `Core` is
+/// A `Mars` builder. Provides control over how the `Mars` is
 /// configured
 #[derive(Debug, Clone)]
-pub struct CoreBuilder
+pub struct MarsBuilder
 {
     /// Size of core's memory buffer
     core_size:     usize,
@@ -48,16 +48,16 @@ pub struct CoreBuilder
     /// Minimum distance between two warriors
     min_distance:  usize,
 
-    /// Core Version multiplied by 100
+    /// Mars Version multiplied by 100
     version:       usize,
 }
 
-impl CoreBuilder
+impl MarsBuilder
 {
-    /// Create a `CoreBuilder` with default parameters
+    /// Create a `MarsBuilder` with default parameters
     pub fn new() -> Self
     {
-        CoreBuilder {
+        MarsBuilder {
             core_size:     DEFAULT_CORE_SIZE,
             pspace_size:   DEFAULT_PSPACE_SIZE,
             max_cycles:    DEFAULT_MAX_CYCLES,
@@ -70,44 +70,44 @@ impl CoreBuilder
 
     /// Build a core and load it with specified programs
     pub fn build_and_load(&self, programs: Vec<(Address, Option<Pin>, Program)>) 
-        -> Result<Core, ()>
+        -> Result<Mars, ()>
     {
         let mut core = self.build();
         if programs.len() > 0 {
-            core.reset(programs)?;
+            core.load_batch(programs)?;
         }
         Ok(core)
     }
 
-    /// Load programs into memory and build a `Core`
+    /// Load programs into memory and build a `Mars`
     ///
     /// # Examples
     /// TODO
-    pub fn build(&self) -> Core
+    pub fn build(&self) -> Mars
     {
         // create core resources
-        let mem = vec![Instruction::default(); self.core_size];
-        let pq  = VecDeque::new();
-        let pspace  = HashMap::new();
+        let mem    = vec![Instruction::default(); self.core_size];
+        let pq     = VecDeque::new();
+        let pspace = HashMap::new();
 
-        Core {
+        Mars {
             // Runtime data
             memory:        mem,
-            current_pid:   0,
-            current_queue: VecDeque::new(),
-            current_cycle: 0,
-            pc:            0,
+            cycle: 0,
             process_queue: pq,
             pspace:        pspace,
-            finished:      false,
+            halted:        true,
             ir:            Instruction::default(),
 
             // Load constraints
             max_length:    self.max_length,
+            min_distance:  self.min_distance,
+
+            // Mars information(const)
+            version:       self.version,
             pspace_size:   self.pspace_size,
 
             // Runtime constraints
-            version:       self.version,
             max_processes: self.max_processes,
             max_cycles:    self.max_cycles,
         }
@@ -117,9 +117,9 @@ impl CoreBuilder
     ///
     /// # Examples
     /// ```
-    /// use libcw::simulation::CoreBuilder;
+    /// use libcw::simulation::MarsBuilder;
     ///
-    /// let core = CoreBuilder::new()
+    /// let core = MarsBuilder::new()
     ///     .core_size(80)
     ///     .build_and_load(vec![])
     ///     .unwrap();
@@ -159,9 +159,9 @@ impl CoreBuilder
     /// # Examples
     ///
     /// ```
-    /// use libcw::simulation::CoreBuilder;
+    /// use libcw::simulation::MarsBuilder;
     ///
-    /// let core = CoreBuilder::new()
+    /// let core = MarsBuilder::new()
     ///     .max_cycles(100)
     ///     .build_and_load(vec![])
     ///     .unwrap();
@@ -184,8 +184,8 @@ impl CoreBuilder
     ///
     /// # Examples
     /// ```
-    /// use libcw::simulation::CoreBuilder;
-    /// let core = CoreBuilder::new()
+    /// use libcw::simulation::MarsBuilder;
+    /// let core = MarsBuilder::new()
     ///     .max_processes(10)
     ///     .build_and_load(vec![])
     ///     .unwrap();
@@ -208,20 +208,13 @@ impl CoreBuilder
     ///
     /// # Examples
     /// ```
-    /// use libcw::simulation::{
-    ///     CoreBuilder,
-    ///     BuilderError,
-    ///     };
+    /// use libcw::simulation::MarsBuilder;
     ///
-    /// use libcw::redcode::{OpMode, OpCode, AddressingMode, Instruction};
-    ///
-    /// let ins = Instruction::default();
-    ///
-    /// let core = CoreBuilder::new()
+    /// let core = MarsBuilder::new()
     ///     .max_length(100)
-    ///     .build_and_load(vec![(0, None, vec![ins; 101])]);
+    ///     .build();
     ///
-    /// assert_eq!(Err(()), core);
+    /// assert_eq!(100, core.max_length());
     /// ```
     ///
     /// # Arguments
@@ -248,7 +241,7 @@ impl CoreBuilder
         self
     }
 
-    /// Core version multiplied by 100 (e.g. version 0.8 -> 80)
+    /// Mars version multiplied by 100 (e.g. version 0.8 -> 80)
     ///
     /// # Arguments
     /// * `version`: version number

@@ -1,15 +1,13 @@
-//! Simulation runtime (aka `Core`) and tools to build a core
 
-use std::iter::FromIterator;
 use std::collections::{VecDeque, HashMap};
 
 use redcode::*;
 
-pub type CoreResult<T> = Result<T, ()>;
+pub type MarsResult<T> = Result<T, ()>;
 
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum CoreEvent
+pub enum MarsEvent
 {
     /// All processes terminated successfully
     Finished,
@@ -33,27 +31,18 @@ pub enum CoreEvent
     Stepped,
 }
 
-/// Core wars runtime
+/// Mars wars runtime
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Core
+pub struct Mars
 {
-    /// Core memory
+    /// Mars memory
     pub(super) memory:        Vec<Instruction>,
-
-    /// Current process id being run
-    pub(super) current_pid:   Pid,
-
-    /// Current program counter
-    pub(super) pc:            Address,
 
     /// Instruction register
     pub(super) ir:            Instruction,
 
-    /// Current process queue
-    pub(super) current_queue: VecDeque<Address>,
-
     /// Current numbered cycle core is executing
-    pub(super) current_cycle: usize,
+    pub(super) cycle:         usize,
 
     /// Program counter for each process currently loaded into memory
     pub(super) process_queue: VecDeque<(Pid, VecDeque<Address>)>,
@@ -62,18 +51,23 @@ pub struct Core
     pub(super) pspace:        HashMap<Pin, Vec<Instruction>>,
 
     /// Has the core finished executing
-    pub(super) finished:      bool,
+    pub(super) halted:        bool,
 
     // Load constraints
+    /// Maximum length of programs when loading
     pub(super) max_length:    usize,
+
+    /// Minimum distance between programs when batch loading
+    pub(super) min_distance:  usize,
+
+    // Mars information (const)
+    /// Mars version
+    pub(super) version:       usize,
 
     /// Size of P-space
     pub(super) pspace_size:   usize,
 
     // Runtime constraints
-    /// Core version
-    pub(super) version:       usize,
-
     /// Maximum of processes that can be on the process queue at any time
     pub(super) max_processes: usize,
 
@@ -81,57 +75,24 @@ pub struct Core
     pub(super) max_cycles:    usize,
 }
 
-impl Core
+impl Mars
 {
     /// Step forward one cycle
-    ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::{CoreBuilder, CoreEvent};
-    /// use libcw::redcode::*;
-    ///
-    /// let imp = vec![
-    ///     Instruction {
-    ///         op: OpField {
-    ///             code: OpCode::Mov,
-    ///             mode: OpMode::I
-    ///         },
-    ///         a: Field {
-    ///             offset: 0,
-    ///             mode: AddressingMode::Direct,
-    ///         },
-    ///         b: Field {
-    ///             offset: 1,
-    ///             mode: AddressingMode::Direct
-    ///         }
-    ///     },
-    /// ];
-    ///
-    /// let mut core = CoreBuilder::new()
-    ///     .build_and_load(vec![
-    ///         (0, None, imp.clone()),
-    ///         (4000, None, imp.clone())
-    ///     ])
-    ///     .unwrap();
-    ///
-    /// // Stepping the core forward will step the pc forward 1
-    /// let event = core.step();
-    /// assert_eq!(Ok(CoreEvent::Stepped), event);
-    ///
-    /// ```
-    pub fn step(&mut self) -> CoreResult<CoreEvent>
+    pub fn step(&mut self) -> MarsResult<MarsEvent>
     {
-        if self.finished() { // can't step after the core is halted
+        if self.halted() { // can't step after the core is halted
             return Err(());
         }
 
         if self.cycle() >= self.max_cycles() {
-            self.finished = true;
-            return Ok(CoreEvent::Tied)
+            self.halted = true;
+            return Ok(MarsEvent::Tied)
         }
 
+        let pc = self.pc().unwrap();
+
         // Fetch instruction
-        self.ir = self.fetch(self.pc);
+        self.ir = self.fetch(pc);
         let (a_mode, b_mode) = (self.ir.a.mode, self.ir.b.mode);
 
         // PostIncrement phase
@@ -143,8 +104,8 @@ impl Core
         // Preincrement phase
         if predecrement {
             // fetch direct target
-            let a_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
-            let b_addr = self.calc_addr_offset(self.pc, self.ir.b.offset);
+            let a_addr = self.calc_addr_offset(pc, self.ir.a.offset);
+            let b_addr = self.calc_addr_offset(pc, self.ir.b.offset);
             let mut a = self.fetch(a_addr);
             let mut b = self.fetch(b_addr);
 
@@ -176,8 +137,8 @@ impl Core
 
         if postincrement {
             // fetch direct target
-            let a_addr = self.calc_addr_offset(self.pc, self.ir.a.offset);
-            let b_addr = self.calc_addr_offset(self.pc, self.ir.b.offset);
+            let a_addr = self.calc_addr_offset(pc, self.ir.a.offset);
+            let b_addr = self.calc_addr_offset(pc, self.ir.b.offset);
             let mut a = self.fetch(a_addr);
             let mut b = self.fetch(b_addr);
 
@@ -199,121 +160,64 @@ impl Core
         }
 
         // check if there are any more process queues running on the core
-        if !self.current_queue.is_empty() {
-            let q_entry = (self.pid(), self.current_queue.clone());
-            self.process_queue.push_front(q_entry);
+        if !self.current_queue().unwrap().is_empty() {
+            let q = self.process_queue.pop_front().unwrap();
+            self.process_queue.push_back(q);
         }
 
         // check if there is only one PID remaining on the process queue
         if self.process_queue.len() <= 1 {
-            self.finished = true;
-            return Ok(CoreEvent::Finished);
+            self.halted = true;
+            return Ok(MarsEvent::Finished);
         }
 
         // Fetch new queue
-        let (pid, q)       = self.process_queue.pop_back().unwrap();
-        self.current_queue = q;
+        let q = self.process_queue.pop_front().unwrap();
+        self.process_queue.push_back(q);
 
-        // Update pid and program counter
-        self.pc          = self.current_queue.pop_back().unwrap();
-        self.current_pid = pid;
-
-        self.current_cycle += 1;
+        self.cycle += 1;
         Ok(exec_event)
     }
 
     /// Has the core finished its execution. This can mean either a tie has
     /// occurred or a warrior has emerged victoriors
-    ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    ///
-    /// // load no programs, meaning that the core is already finished
-    /// let mut core = CoreBuilder::new().build_and_load(vec![]).unwrap();
-    /// core.halt();
-    ///
-    /// assert_eq!(true, core.finished());
-    /// 
-    /// // stepping the core after it has finished results in an error
-    /// assert_eq!(Err(()), core.step());
-    ///
-    /// ```
-    pub fn finished(&mut self) -> bool
+    pub fn halted(&mut self) -> bool
     {
-        self.finished
+        self.halted
     }
 
-    /// Halt the Core
+    /// Halt the Mars
     pub fn halt(&mut self) -> &mut Self
     {
-        self.finished = true;
+        self.halted = true;
         self
     }
 
-    /// Reset the core
-    ///
-    /// # Arguments
-    /// * `programs`: programs packed with pins and base load address
-    pub fn reset(&mut self, programs: Vec<(Address, Option<Pin>, Program)>)
-        -> Result<(), ()>
+    /// Reset the Mars's memory
+    pub fn reset(&mut self)
     {
-        self.validate(&programs)?;
-
-        // reset all assets
-        self.process_queue.clear();
-        self.current_cycle = 0;
-
-        // reset memory
-        for e in self.memory.iter_mut() {
-            *e = Instruction::default()
-        }
-
-        // reload programs
-        for &(base, _, ref prog) in programs.iter() {
-            // copy into memory
-            for i in 0..prog.len() {
-                self.memory[i + base as usize] = prog[i];
-            }
-        }
-
-        // Reload process queue
-        for (i, &(base, _, _)) in programs.iter().enumerate() {
-            let pid = i as Pid; 
-            let mut q = VecDeque::new();
-            q.push_front(base);
-
-            let q_entry = (pid, q);
-            self.process_queue.push_front(q_entry);
-        }
-
-        // Prepare current queue
-        let (pid, curr_q) = self.process_queue.pop_back()
-            .unwrap_or((0, VecDeque::new()));
-        self.current_pid = pid;
-        self.current_queue = curr_q;
-        self.pc = self.current_queue.pop_back().unwrap_or(0);
-        self.finished = false;
-
-        Ok(())
+        unimplemented!();
     }
 
-    pub fn reset_hard(&mut self, programs: Vec<(Address, Option<Pin>, Program)>)
+    /// Reset the Mar's memory AND P-space
+    pub fn reset_hard(&mut self)
+    {
+        unimplemented!();
+    }
+
+    /// Load a program, checking only its length for validity
+    pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: Program)
         -> Result<(), ()>
     {
-        // Reset pspace
-        self.pspace.clear();
+        unimplemented!();
+    }
 
-        for (i, &(_, maybe_pin, _)) in programs.iter().enumerate() {
-            let pin = maybe_pin.unwrap_or(i as Pin);
-
-            self.pspace.insert(
-                pin,
-                vec![Instruction::default(); self.pspace_size]
-                );
-        }
-
-        self.reset(programs)
+    /// Load mutliple programs into the Mars, checking their spacing and their
+    /// length
+    pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, Program)>)
+        -> Result<(), ()>
+    {
+        unimplemented!();
     }
 
     /// Validate that programs do not violate runtime constraints
@@ -340,44 +244,17 @@ impl Core
     }
 
     /// Get `Pid` currently executing on the core
-    /// # Example
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    /// use libcw::redcode::*;
-    ///
-    /// let imp = vec![
-    ///     Instruction {
-    ///         op: OpField {
-    ///             code: OpCode::Mov,
-    ///             mode: OpMode::I
-    ///         },
-    ///         a: Field {
-    ///             offset: 0,
-    ///             mode: AddressingMode::Direct,
-    ///         },
-    ///         b: Field {
-    ///             offset: 1,
-    ///             mode: AddressingMode::Direct
-    ///         }
-    ///     },
-    /// ];
-    ///
-    /// let mut core = CoreBuilder::new().build_and_load(vec![
-    ///     (0, None, imp.clone()),
-    ///     (4000, None, imp.clone())
-    ///     ])
-    ///     .unwrap();
-    ///
-    /// // inital program counter is 0, first program was loaded in at address 0
-    /// assert_eq!(0, core.pc());
-    /// let _ = core.step();
-    /// // Goes to next processes's program counter 
-    /// assert_eq!(4000, core.pc());
-    /// ```
-    ///
-    pub fn pc(&self) -> Address
+    pub fn pc(&self) -> Option<Address>
     {
-        self.pc
+        if let Some(q) = self.current_queue() {
+            if let Some(pc) = q.front() {
+                Some(pc.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     /// Get the program counters for all processes
@@ -387,203 +264,67 @@ impl Core
     }
 
     /// Current cycle core is executing
-    ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::{CoreBuilder, CoreEvent};
-    /// use libcw::redcode::*;
-    ///
-    /// let imp = vec![
-    ///     Instruction {
-    ///         op: OpField {
-    ///             code: OpCode::Mov,
-    ///             mode: OpMode::I
-    ///         },
-    ///         a: Field {
-    ///             offset: 0,
-    ///             mode: AddressingMode::Direct,
-    ///         },
-    ///         b: Field {
-    ///             offset: 1,
-    ///             mode: AddressingMode::Direct
-    ///         }
-    ///     },
-    /// ];
-    ///
-    /// let mut core = CoreBuilder::new().build_and_load(vec![
-    ///     (0, None, imp.clone()),
-    ///     (4000, None, imp.clone())
-    ///     ])
-    ///     .unwrap();
-    ///
-    /// // initial cycle is 0
-    /// assert_eq!(0, core.cycle());
-    /// let _ = core.step();
-    /// // We're on the next cycle now
-    /// assert_eq!(1, core.cycle());
-    /// ```
     pub fn cycle(&self) -> usize
     {
-        self.current_cycle
+        self.cycle
     }
 
     /// Get the current `Pid` executing
-    ///
-    /// # Example
-    /// ```
-    /// use libcw::simulation::{CoreBuilder, CoreEvent};
-    /// use libcw::redcode::*;
-    ///
-    /// let imp = vec![
-    ///     Instruction {
-    ///         op: OpField {
-    ///             code: OpCode::Mov,
-    ///             mode: OpMode::I
-    ///         },
-    ///         a: Field {
-    ///             offset: 0,
-    ///             mode: AddressingMode::Direct,
-    ///         },
-    ///         b: Field {
-    ///             offset: 1,
-    ///             mode: AddressingMode::Direct
-    ///         }
-    ///     },
-    /// ];
-    ///
-    /// let mut core = CoreBuilder::new().build_and_load(vec![
-    ///     (0, None, imp.clone()),
-    ///     (4000, None, imp.clone())
-    ///     ])
-    ///     .unwrap();
-    ///
-    /// // initial pid executing is 0
-    /// assert_eq!(0, core.pid());
-    /// let _ = core.step();
-    /// // Next pid is 0
-    /// assert_eq!(1, core.pid());
-    /// ```
-    pub fn pid(&self) -> Pid
+    pub fn pid(&self) -> Option<Pid>
     {
-        self.current_pid
+        if let Some(&(pid, _)) = self.process_queue.front() {
+            Some(pid)
+        } else {
+            None
+        }
     }
 
     /// Get all `Pid`s that are currently active in the order they will be 
     /// executing
-    ///
-    /// # Example
-    /// ```
-    /// use std::collections::HashSet;
-    /// use libcw::simulation::CoreBuilder;
-    /// use libcw::redcode::*;
-    ///
-    /// let imp = vec![
-    ///     Instruction {
-    ///         op: OpField {
-    ///             code: OpCode::Mov,
-    ///             mode: OpMode::I
-    ///         },
-    ///         a: Field {
-    ///             offset: 0,
-    ///             mode: AddressingMode::Direct,
-    ///         },
-    ///         b: Field {
-    ///             offset: 1,
-    ///             mode: AddressingMode::Direct
-    ///         }
-    ///     },
-    /// ];
-    ///
-    /// let mut core = CoreBuilder::new().build_and_load(vec![
-    ///     (0, None, imp.clone()),
-    ///     (4000, None, imp.clone())
-    ///     ])
-    ///     .unwrap();
-    ///
-    /// // Two programs were loaded, so two pids are running, 0 is next to exec
-    /// assert_eq!(vec![0, 1], core.pids());
-    /// let _ = core.step();
-    /// // There are still 2 pids executing on the core, but 1 is the current
-    /// assert_eq!(vec![1, 0], core.pids());
-    /// ```
     pub fn pids(&self) -> Vec<Pid>
     {
-        let mut pids = vec![self.pid()];
-        pids.extend(self.process_queue.iter().map(|&(pid, _)| pid));
+        let mut pids = vec![];
+        if let Some(pid) = self.pid() {
+            pids.push(pid);
+            pids.extend(self.process_queue.iter().map(|&(pid, _)| pid));
+        } 
         pids
     }
 
     /// Size of memory
-    ///
-    /// # Example
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    ///
-    /// let core = CoreBuilder::new()
-    ///     .core_size(100)
-    ///     .build_and_load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(core.size(), 100);
-    /// ```
     pub fn size(&self) -> usize
     {
         self.memory.len()
     }
 
     /// Version of core multiplied by `100`
-    ///
-    /// # Example
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    ///
-    /// let core = CoreBuilder::new()
-    ///     .version(800)
-    ///     .build_and_load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(core.version(), 800);
-    /// ```
     pub fn version(&self) -> usize
     {
         self.version
     }
 
     /// Maximum number of processes that can be in the core queue
-    ///
-    /// # Example
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    ///
-    /// let core = CoreBuilder::new()
-    ///     .max_processes(800)
-    ///     .build_and_load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(core.max_processes(), 800);
-    /// ```
     pub fn max_processes(&self) -> usize
     {
         self.max_processes
     }
 
     /// Maximum number of cycles before a tie is declared
-    ///
-    /// # Example
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    ///
-    /// let core = CoreBuilder::new()
-    ///     .max_cycles(800)
-    ///     .build_and_load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(core.max_cycles(), 800);
-    /// // TODO: test that tie happens at this number
-    /// ```
     pub fn max_cycles(&self) -> usize
     {
         self.max_cycles
+    }
+
+    /// Maximum number of instructions allowed in a program
+    pub fn max_length(&self) -> usize
+    {
+        self.max_length
+    }
+
+    /// Minimum distance allowed between programs
+    pub fn min_distance(&self) -> usize
+    {
+        self.min_distance
     }
 
     /// Get immutable reference to memory
@@ -593,50 +334,36 @@ impl Core
     }
 
     /// Get the number of processes currently running
-    ///
-    /// # Example
-    /// ```
-    /// use libcw::simulation::CoreBuilder;
-    /// use libcw::redcode::*;
-    ///
-    /// let imp = vec![
-    ///     Instruction {
-    ///         op: OpField {
-    ///             code: OpCode::Mov,
-    ///             mode: OpMode::I
-    ///         },
-    ///         a: Field {
-    ///             offset: 0,
-    ///             mode: AddressingMode::Direct,
-    ///         },
-    ///         b: Field {
-    ///             offset: 1,
-    ///             mode: AddressingMode::Direct
-    ///         }
-    ///     },
-    /// ];
-    ///
-    /// let mut core = CoreBuilder::new().build_and_load(vec![
-    ///     (0, None, imp.clone()),
-    ///     (4000, None, imp.clone())
-    ///     ])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(2, core.process_count());
-    /// // TODO: test splitting + test terminating
-    /// ```
     pub fn process_count(&self) -> usize
     {
         // count length of all local process queues in the global pqueue
         self.process_queue.iter().fold(1, |acc, &(_, ref x)| acc + x.len())
     }
 
-    /// Execute the instrcution in the `Instruction` register
-    fn execute(&mut self) -> CoreEvent
+    /// Fetch reference to current queue
+    fn current_queue(&self) -> Option<&VecDeque<Address>>
     {
-        let code = self.ir.op.code;
+        if let Some(&(_, ref q)) = self.process_queue.front() {
+            Some(q)
+        } else {
+            None
+        }
+    }
 
-        match code {
+    /// Fetch mutable reference to current queue
+    fn current_queue_mut(&mut self) -> Option<&mut VecDeque<Address>>
+    {
+        if let Some(&mut (_, ref mut q)) = self.process_queue.front_mut() {
+            Some(q)
+        } else {
+            None
+        }
+    }
+
+    /// Execute the instrcution in the `Instruction` register
+    fn execute(&mut self) -> MarsEvent
+    {
+        match self.ir.op.code {
             OpCode::Dat => self.exec_dat(),
             OpCode::Mov => self.exec_mov(),
             OpCode::Add => self.exec_add(),
@@ -693,25 +420,27 @@ impl Core
             (field.mode, field.offset)
         };
 
-        let direct = self.fetch(self.calc_addr_offset(self.pc, offset));
+        let pc = self.pc().unwrap();
+
+        let direct = self.fetch(self.calc_addr_offset(pc, offset));
 
         match mode {
-            Immediate => self.pc,
-            Direct => self.calc_addr_offset(self.pc, offset),
+            Immediate => pc,
+            Direct => self.calc_addr_offset(pc, offset),
             AIndirect
                 | AIndirectPreDecrement
                 | AIndirectPostIncrement =>
-                self.calc_addr_offset(self.pc, direct.a.offset + offset),
+                self.calc_addr_offset(pc, direct.a.offset + offset),
             BIndirect
                 | BIndirectPreDecrement
                 | BIndirectPostIncrement =>
-                self.calc_addr_offset(self.pc, direct.b.offset + offset),
+                self.calc_addr_offset(pc, direct.b.offset + offset),
         }
     }
 
     /// Get the effective of address of the current `Instruction`'s A Field
     ///
-    /// An alias for `Core::effective_addr(true)`
+    /// An alias for `Mars::effective_addr(true)`
     fn effective_addr_a(&self) -> Address
     {
         self.effective_addr(true)
@@ -719,7 +448,7 @@ impl Core
 
     /// Get the effective of address of the current `Instruction`'s A Field
     ///
-    /// An alias for `Core::effective_addr(false)`
+    /// An alias for `Mars::effective_addr(false)`
     fn effective_addr_b(&self) -> Address
     {
         self.effective_addr(false)
@@ -730,45 +459,57 @@ impl Core
     ////////////////////////////////////////////////////////////////////////////
 
     /// Move the program counter forward
-    fn step_pc(&mut self) -> CoreEvent
+    fn step_pc(&mut self) -> MarsEvent
     {
-        self.pc = (self.pc + 1) % self.size() as Address;
-        CoreEvent::Stepped
+        let pc = self.pc().unwrap();
+        *self.current_queue_mut().unwrap().front_mut().unwrap() =
+            (pc + 1) % self.size() as Address;
+        MarsEvent::Stepped
     }
 
     /// Move the program counter forward twice
-    fn skip_pc(&mut self) -> CoreEvent
+    fn skip_pc(&mut self) -> MarsEvent
     {
-        self.pc = (self.pc + 2) % self.size() as Address;
-        CoreEvent::Skipped
+        let pc =self.pc().unwrap();
+        // TODO: Holy shit this is uuugggglllllyyyy
+        *self.current_queue_mut().unwrap().front_mut().unwrap() = 
+            (pc + 2) % self.size() as Address;
+        MarsEvent::Skipped
     }
 
     /// Jump the program counter by an offset
     ///
     /// # Arguments
     /// * `offset`: amount to jump
-    fn jump_pc(&mut self, offset: Offset) -> CoreEvent
+    fn jump_pc(&mut self, offset: Offset) -> MarsEvent
     {
-        self.pc = self.calc_addr_offset(self.pc, offset);
-        CoreEvent::Jumped
+        let pc = self.pc().unwrap();
+        // TODO: Holy shit this is uuugggglllllyyyy
+        *self.current_queue_mut().unwrap().front_mut().unwrap() = 
+            self.calc_addr_offset(pc, offset);
+        MarsEvent::Jumped
     }
 
     /// Move the program counter forward by one and then queue the program
     /// counter onto the current queue
-    fn step_and_queue_pc(&mut self) -> CoreEvent
+    fn step_and_queue_pc(&mut self) -> MarsEvent
     {
         self.step_pc();
-        self.current_queue.push_front(self.pc);
-        CoreEvent::Stepped
+
+        let pc = self.pc().unwrap();
+        self.current_queue_mut().unwrap().push_back(pc);
+        MarsEvent::Stepped
     }
 
     /// Move the program counter forward twice and then queue the program
     /// counter onto the current queue
-    fn skip_and_queue_pc(&mut self) -> CoreEvent
+    fn skip_and_queue_pc(&mut self) -> MarsEvent
     {
         self.skip_pc();
-        self.current_queue.push_front(self.pc);
-        CoreEvent::Skipped
+
+        let pc = self.pc().unwrap();
+        self.current_queue_mut().unwrap().push_back(pc);
+        MarsEvent::Skipped
     }
 
     /// Jump the program counter by an offset and then queue the program
@@ -776,11 +517,13 @@ impl Core
     ///
     /// # Arguments
     /// * `offset`: amount to jump by
-    fn jump_and_queue_pc(&mut self, offset: Offset) -> CoreEvent
+    fn jump_and_queue_pc(&mut self, offset: Offset) -> MarsEvent
     {
         self.jump_pc(offset);
-        self.current_queue.push_front(self.pc);
-        CoreEvent::Jumped
+        
+        let new_pc = self.pc().unwrap();
+        self.current_queue_mut().unwrap().push_back(new_pc);
+        MarsEvent::Jumped
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -882,15 +625,15 @@ impl Core
     /// Execute `dat` instruction
     ///
     /// Supported OpModes: None
-    fn exec_dat(&self) -> CoreEvent
+    fn exec_dat(&self) -> MarsEvent
     {
-        CoreEvent::Terminated(self.pid())
+        MarsEvent::Terminated(self.pid().unwrap())
     }
 
     /// Execute `mov` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_mov(&mut self) -> CoreEvent
+    fn exec_mov(&mut self) -> MarsEvent
     {
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
@@ -920,7 +663,7 @@ impl Core
     /// Execute `add` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_add(&mut self) -> CoreEvent
+    fn exec_add(&mut self) -> MarsEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
@@ -951,7 +694,7 @@ impl Core
     /// Execute `sub` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_sub(&mut self) -> CoreEvent
+    fn exec_sub(&mut self) -> MarsEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
@@ -982,7 +725,7 @@ impl Core
     /// Execute `mul` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mul(&mut self) -> CoreEvent
+    fn exec_mul(&mut self) -> MarsEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
@@ -1013,7 +756,7 @@ impl Core
     /// Execute `div` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_div(&mut self) -> CoreEvent
+    fn exec_div(&mut self) -> MarsEvent
     {
         // TODO: math needs to be done modulo core size
         // TODO: division by zero needs to kill the process
@@ -1045,7 +788,7 @@ impl Core
     /// Execute `mod` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mod(&mut self) -> CoreEvent
+    fn exec_mod(&mut self) -> MarsEvent
     {
         // TODO: math needs to be done modulo core size
         // TODO: division by zero needs to kill the process
@@ -1077,7 +820,7 @@ impl Core
     /// Execute `jmp` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_jmp(&mut self) -> CoreEvent
+    fn exec_jmp(&mut self) -> MarsEvent
     {
         match self.ir.a.mode {
             AddressingMode::Immediate
@@ -1090,13 +833,13 @@ impl Core
             _ => unimplemented!()
         };
 
-        CoreEvent::Jumped
+        MarsEvent::Jumped
     }
 
     /// Execute `jmz` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_jmz(&mut self) -> CoreEvent
+    fn exec_jmz(&mut self) -> MarsEvent
     {
         let b = self.fetch_effective_b();
         let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
@@ -1121,7 +864,7 @@ impl Core
     /// Execute `jmn` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_jmn(&mut self) -> CoreEvent
+    fn exec_jmn(&mut self) -> MarsEvent
     {
         let b = self.fetch_effective_b();
         let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
@@ -1146,7 +889,7 @@ impl Core
     /// Execute `djn` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_djn(&mut self) -> CoreEvent
+    fn exec_djn(&mut self) -> MarsEvent
     {
         // predecrement the instruction before checking if its not zero
         let mut b = self.fetch_effective_b();
@@ -1171,14 +914,14 @@ impl Core
     /// Execute `spl` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_spl(&mut self) -> CoreEvent
+    fn exec_spl(&mut self) -> MarsEvent
     {
         if self.process_count() < self.max_processes(){
             let target = self.effective_addr_a();
-            self.current_queue.push_front(target);
+            self.current_queue_mut().unwrap().push_back(target);
 
             self.step_and_queue_pc();
-            CoreEvent::Split
+            MarsEvent::Split
         } else {
             self.step_and_queue_pc()
         }
@@ -1187,7 +930,7 @@ impl Core
     /// Execute `seq` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_seq(&mut self) -> CoreEvent
+    fn exec_seq(&mut self) -> MarsEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
@@ -1210,7 +953,7 @@ impl Core
     /// Execute `sne` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_sne(&mut self) -> CoreEvent
+    fn exec_sne(&mut self) -> MarsEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
@@ -1233,7 +976,7 @@ impl Core
     /// Execute `slt` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_slt(&mut self) -> CoreEvent
+    fn exec_slt(&mut self) -> MarsEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
@@ -1256,7 +999,7 @@ impl Core
     /// Execute `ldp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_ldp(&mut self) -> CoreEvent
+    fn exec_ldp(&mut self) -> MarsEvent
     {
         unimplemented!();
     }
@@ -1264,13 +1007,13 @@ impl Core
     /// Execute `stp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_stp(&mut self) -> CoreEvent
+    fn exec_stp(&mut self) -> MarsEvent
     {
         unimplemented!();
     }
 
     /// Execute 'nop' instruction
-    fn exec_nop(&mut self) -> CoreEvent
+    fn exec_nop(&mut self) -> MarsEvent
     {
         self.step_and_queue_pc()
     }
