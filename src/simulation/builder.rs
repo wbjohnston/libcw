@@ -82,26 +82,7 @@ impl CoreBuilder
     /// Load programs into memory and build a `Core`
     ///
     /// # Examples
-    /// ```
-    /// use libcw::simulation::*;
-    /// use libcw::redcode::*;
-    ///
-    /// let program = vec![Instruction::default(); 10];
-    ///
-    /// let starting_address = 2; // program will be loaded at this addr
-    /// let core = CoreBuilder::new()
-    ///     .core_size(8)
-    ///     .build_and_load(vec![(starting_address, None, program.clone())])
-    ///     .unwrap();
-    ///
-    ///let (start, end) = (starting_address, starting_address + program.len());
-    ///
-    /// assert_eq!(
-    ///     core.memory().as_slice()[start..end],
-    ///     program.as_slice()
-    /// );
-    ///
-    /// ```
+    /// TODO
     pub fn build(&self) -> Core
     {
         // create core resources

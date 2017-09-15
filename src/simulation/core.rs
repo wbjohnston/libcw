@@ -7,16 +7,6 @@ use redcode::*;
 
 pub type CoreResult<T> = Result<T, ()>;
 
-/*
- * Design things to do:
- *  * Modify local process queue to add another pid. All processes will be
- *  queued with their own pid. This lets us say child process 10 of process
- *  2 terminated. 
- *  * I'm not super happy with the fields in `Core`, need to determine if all
- *  of these fields are necessary
- *  * Implement iterator for `Core`
- */
-
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CoreEvent
@@ -254,6 +244,7 @@ impl Core
         self.finished
     }
 
+    /// Halt the Core
     pub fn halt(&mut self) -> &mut Self
     {
         self.finished = true;
@@ -299,7 +290,6 @@ impl Core
         // Prepare current queue
         let (pid, curr_q) = self.process_queue.pop_back()
             .unwrap_or((0, VecDeque::new()));
-
         self.current_pid = pid;
         self.current_queue = curr_q;
         self.pc = self.current_queue.pop_back().unwrap_or(0);
