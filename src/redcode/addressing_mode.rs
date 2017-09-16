@@ -56,7 +56,7 @@ impl fmt::Display for AddressingMode
     {
         let out = match *self {
             AddressingMode::Immediate              => "#",
-            AddressingMode::Direct                 => " ",
+            AddressingMode::Direct                 => "$",
             AddressingMode::AIndirect              => "*",
             AddressingMode::AIndirectPreDecrement  => "{",
             AddressingMode::AIndirectPostIncrement => "}",

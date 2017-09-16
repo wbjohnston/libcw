@@ -5,6 +5,7 @@ use redcode::*;
 
 pub type MarsResult<T> = Result<T, MarsError>;
 
+/// Errors that can occur during simulation or loading
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MarsError
 {
@@ -181,8 +182,8 @@ impl Mars
             self.process_queue.push_back(q);
         }
 
-        // check if there is only one PID remaining on the process queue
-        if self.process_queue.len() <= 1 {
+        // If no there are no processes left
+        if self.process_queue.is_empty() {
             self.halted = true;
             return Ok(MarsEvent::Finished);
         }
@@ -257,6 +258,7 @@ impl Mars
             self.process_queue.push_front((pin, q));
 
             self.process_count += 1;
+            self.halted = false;
             Ok(())
         } else {
             Err(MarsError::InvalidLength)
@@ -297,7 +299,7 @@ impl Mars
     }
 
     /// Get the program counters for all processes
-    pub fn pcs(&self) -> Vec<(Pid, Address)>
+    pub fn pcs(&self) -> Vec<Address>
     {
         unimplemented!();
     }
@@ -957,9 +959,10 @@ impl Mars
     {
         if self.process_count() < self.max_processes(){
             let target = self.effective_addr_a();
-            self.current_queue_mut().unwrap().push_back(target);
 
+            self.current_queue_mut().unwrap().push_back(target);
             self.step_and_queue_pc();
+            self.process_count += 1;
             MarsEvent::Split
         } else {
             self.step_and_queue_pc()
