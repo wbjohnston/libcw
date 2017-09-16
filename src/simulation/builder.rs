@@ -95,6 +95,7 @@ impl MarsBuilder
             memory:        mem,
             cycle: 0,
             process_queue: pq,
+            process_count: 0,
             pspace:        pspace,
             halted:        true,
             ir:            Instruction::default(),

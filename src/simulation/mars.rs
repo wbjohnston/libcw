@@ -3,7 +3,20 @@ use std::collections::{VecDeque, HashMap};
 
 use redcode::*;
 
-pub type MarsResult<T> = Result<T, ()>;
+pub type MarsResult<T> = Result<T, MarsError>;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MarsError
+{
+    /// Core was already halted
+    Halted,
+
+    /// Validation error: program has invalid length
+    InvalidLength,
+
+    /// Validation error: invalid distance between programs
+    InvalidDistance
+}
 
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -19,7 +32,7 @@ pub enum MarsEvent
     Split,
 
     /// A process terminated
-    Terminated(Pid),
+    Terminated,
 
     /// A process jumped address
     Jumped,
@@ -53,6 +66,9 @@ pub struct Mars
     /// Has the core finished executing
     pub(super) halted:        bool,
 
+    /// Number of processes currently running on the `MARS`
+    pub(super) process_count: usize,
+
     // Load constraints
     /// Maximum length of programs when loading
     pub(super) max_length:    usize,
@@ -81,7 +97,7 @@ impl Mars
     pub fn step(&mut self) -> MarsResult<MarsEvent>
     {
         if self.halted() { // can't step after the core is halted
-            return Err(());
+            return Err(MarsError::Halted);
         }
 
         if self.cycle() >= self.max_cycles() {
@@ -193,54 +209,77 @@ impl Mars
         self
     }
 
-    /// Reset the Mars's memory
+    /// Reset the Mars's memory and the process queue
     pub fn reset(&mut self)
     {
-        unimplemented!();
+        // reset memory
+        for e in self.memory.iter_mut() {
+            *e = Instruction::default();
+        }
+
+        self.process_queue.clear();
+
+        self.cycle         = 0;
+        self.process_count = 0;
+        self.ir            = Instruction::default();
+        self.halted        = true;
     }
 
-    /// Reset the Mar's memory AND P-space
+    /// Reset the Mar's memory, process queue, AND P-space
     pub fn reset_hard(&mut self)
     {
-        unimplemented!();
+        self.pspace.clear();
+        self.reset();
     }
 
     /// Load a program, checking only its length for validity
-    pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: Program)
-        -> Result<(), ()>
+    pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: &Program)
+        -> MarsResult<()>
     {
-        unimplemented!();
+        let valid_length = prog.len() <= self.max_length();
+        if valid_length {
+            // load program into memory
+            let size = self.size();
+            let pin = pin.unwrap_or(self.process_count as Pid);
+            for i in 0..prog.len() {
+                self.memory[(i + dest as usize) % size] = prog[i];
+            }
+
+            // Create pspace
+            self.pspace.insert(
+                pin,
+                vec![Instruction::default(); self.pspace_size]
+                );
+
+            // Add to process queue
+            let mut q = VecDeque::new();
+            q.push_front(dest);
+            self.process_queue.push_front((pin, q));
+
+            self.process_count += 1;
+            Ok(())
+        } else {
+            Err(MarsError::InvalidLength)
+        }
     }
 
     /// Load mutliple programs into the Mars, checking their spacing and their
     /// length
-    pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, Program)>)
-        -> Result<(), ()>
+    pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, &Program)>)
+        -> MarsResult<()>
     {
-        unimplemented!();
-    }
+        let valid_margin = true; // TODO: actually validate distance
 
-    /// Validate that programs do not violate runtime constraints
-    ///
-    /// # Arguments
-    /// * `programs`:
-    fn validate(&self, programs: &Vec<(Address, Option<Pin>, Program)>)
-        -> Result<(), ()>
-    {
-        let all_valid_length = programs.iter()
-            .any(|&(_, _, ref prog)| prog.len() <= self.max_length);
+        if valid_margin {
+            for &(dest, maybe_pin, ref prog) in programs.iter() {
+                self.load(dest, maybe_pin, prog)?; 
+            }
 
-        if !all_valid_length {
-            return Err(());
+            Ok(())
+        } else {
+
+            Err(MarsError::InvalidDistance)
         }
-
-        // TODO: actually check spacing
-        let valid_spacing = true;
-        if !valid_spacing {
-            return Err(());
-        }
-
-        Ok(())
     }
 
     /// Get `Pid` currently executing on the core
@@ -336,8 +375,7 @@ impl Mars
     /// Get the number of processes currently running
     pub fn process_count(&self) -> usize
     {
-        // count length of all local process queues in the global pqueue
-        self.process_queue.iter().fold(1, |acc, &(_, ref x)| acc + x.len())
+        self.process_count
     }
 
     /// Fetch reference to current queue
@@ -627,7 +665,8 @@ impl Mars
     /// Supported OpModes: None
     fn exec_dat(&self) -> MarsEvent
     {
-        MarsEvent::Terminated(self.pid().unwrap())
+        self.process_count -= 1;
+        MarsEvent::Terminated
     }
 
     /// Execute `mov` instruction
