@@ -663,7 +663,7 @@ impl Mars
     /// Execute `dat` instruction
     ///
     /// Supported OpModes: None
-    fn exec_dat(&self) -> MarsEvent
+    fn exec_dat(&mut self) -> MarsEvent
     {
         self.process_count -= 1;
         MarsEvent::Terminated
