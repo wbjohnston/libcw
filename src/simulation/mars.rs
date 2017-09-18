@@ -5,6 +5,7 @@ use redcode::*;
 
 pub type MarsResult<T> = Result<T, MarsError>;
 
+// TODO: I want to split out load errors and runtime errors
 /// Errors that can occur during simulation or loading
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MarsError
@@ -16,7 +17,10 @@ pub enum MarsError
     InvalidLength,
 
     /// Validation error: invalid distance between programs
-    InvalidDistance
+    InvalidDistance,
+
+    /// Load cannot be called with no programs
+    EmptyLoadCall
 }
 
 /// Events that can happen during a running simulation
@@ -234,6 +238,16 @@ impl Mars
     }
 
     /// Load a program, checking only its length for validity
+    /// # Arguments
+    /// * `dest`: memory address program will be loaded to
+    /// * `pin`: the `Pin` that the program will use to access it's private st
+    ///     storage
+    /// * `prog`: reference to the program to load
+    ///
+    /// # Return
+    /// If the program is loaded successfully `Ok(()). Otherwise, the program 
+    ///     was too long. This is the only load constraint that is checked in
+    ///     a singleton load
     pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: &Program)
         -> MarsResult<()>
     {
@@ -267,9 +281,19 @@ impl Mars
 
     /// Load mutliple programs into the Mars, checking their spacing and their
     /// length
+    /// # Arguments
+    /// * `programs`: programs and load information loaded in a tuple, cannot
+    ///     be empty
+    /// # Return
+    /// `Ok(())` if the load was successful, otherwise an error with the 
+    ///     corresponding `MarsError`
     pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, &Program)>)
         -> MarsResult<()>
     {
+        if programs.is_empty() {
+            return Err(MarsError::EmptyLoadCall);
+        }
+
         let valid_margin = true; // TODO: actually validate distance
 
         if valid_margin {
