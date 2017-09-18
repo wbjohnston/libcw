@@ -3,8 +3,11 @@
 mod mars;
 pub use self::mars::{
     Mars,
-    MarsEvent,
-    MarsResult
+    LoadResult,
+    LoadError,
+    SimulationResult,
+    SimulationEvent,
+    SimulationError
 };
 
 mod builder;

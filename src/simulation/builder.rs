@@ -4,7 +4,7 @@ use std::collections::{VecDeque, HashMap};
 
 use redcode::{Instruction, Pin, Address, Program};
 use simulation::Mars;
-use simulation::MarsResult;
+use simulation::LoadResult;
 
 // Mars defaults
 const DEFAULT_CORE_SIZE: usize     = 8000;
@@ -71,7 +71,7 @@ impl MarsBuilder
 
     /// Build a core and load it with specified programs
     pub fn build_and_load(&self, programs: Vec<(Address, Option<Pin>, &Program)>) 
-        -> MarsResult<Mars>
+        -> LoadResult<Mars>
     {
         let mut core = self.build();
         if programs.len() > 0 {

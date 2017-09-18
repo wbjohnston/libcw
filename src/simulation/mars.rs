@@ -3,16 +3,21 @@ use std::collections::{VecDeque, HashMap};
 
 use redcode::*;
 
-pub type MarsResult<T> = Result<T, MarsError>;
+pub type SimulationResult<T> = Result<T, SimulationError>;
+pub type LoadResult<T> = Result<T, LoadError>;
 
-// TODO: I want to split out load errors and runtime errors
-/// Errors that can occur during simulation or loading
+/// Errors that can occur during simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum MarsError
+pub enum SimulationError
 {
     /// Core was already halted
     Halted,
+}
 
+/// Errors that can occur during loading
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum LoadError
+{
     /// Validation error: program has invalid length
     InvalidLength,
 
@@ -20,12 +25,12 @@ pub enum MarsError
     InvalidDistance,
 
     /// Load cannot be called with no programs
-    EmptyLoadCall
+    EmptyLoad
 }
 
 /// Events that can happen during a running simulation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum MarsEvent
+pub enum SimulationEvent
 {
     /// All processes terminated successfully
     Finished,
@@ -99,15 +104,15 @@ pub struct Mars
 impl Mars
 {
     /// Step forward one cycle
-    pub fn step(&mut self) -> MarsResult<MarsEvent>
+    pub fn step(&mut self) -> SimulationResult<SimulationEvent>
     {
         if self.halted() { // can't step after the core is halted
-            return Err(MarsError::Halted);
+            return Err(SimulationError::Halted);
         }
 
         if self.cycle() >= self.max_cycles() {
             self.halted = true;
-            return Ok(MarsEvent::Tied)
+            return Ok(SimulationEvent::Tied)
         }
 
         let pc = self.pc().unwrap();
@@ -189,7 +194,7 @@ impl Mars
         // If no there are no processes left
         if self.process_queue.is_empty() {
             self.halted = true;
-            return Ok(MarsEvent::Finished);
+            return Ok(SimulationEvent::Finished);
         }
 
         // Fetch new queue
@@ -249,7 +254,7 @@ impl Mars
     ///     was too long. This is the only load constraint that is checked in
     ///     a singleton load
     pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: &Program)
-        -> MarsResult<()>
+        -> LoadResult<()>
     {
         let valid_length = prog.len() <= self.max_length();
         if valid_length {
@@ -275,7 +280,7 @@ impl Mars
             self.halted = false;
             Ok(())
         } else {
-            Err(MarsError::InvalidLength)
+            Err(LoadError::InvalidLength)
         }
     }
 
@@ -286,12 +291,12 @@ impl Mars
     ///     be empty
     /// # Return
     /// `Ok(())` if the load was successful, otherwise an error with the 
-    ///     corresponding `MarsError`
+    ///     corresponding `SimulationError`
     pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, &Program)>)
-        -> MarsResult<()>
+        -> LoadResult<()>
     {
         if programs.is_empty() {
-            return Err(MarsError::EmptyLoadCall);
+            return Err(LoadError::EmptyLoad);
         }
 
         let valid_margin = true; // TODO: actually validate distance
@@ -303,8 +308,7 @@ impl Mars
 
             Ok(())
         } else {
-
-            Err(MarsError::InvalidDistance)
+            Err(LoadError::InvalidDistance)
         }
     }
 
@@ -431,7 +435,7 @@ impl Mars
     }
 
     /// Execute the instrcution in the `Instruction` register
-    fn execute(&mut self) -> MarsEvent
+    fn execute(&mut self) -> SimulationEvent
     {
         match self.ir.op.code {
             OpCode::Dat => self.exec_dat(),
@@ -529,57 +533,57 @@ impl Mars
     ////////////////////////////////////////////////////////////////////////////
 
     /// Move the program counter forward
-    fn step_pc(&mut self) -> MarsEvent
+    fn step_pc(&mut self) -> SimulationEvent
     {
         let pc = self.pc().unwrap();
         *self.current_queue_mut().unwrap().front_mut().unwrap() =
             (pc + 1) % self.size() as Address;
-        MarsEvent::Stepped
+        SimulationEvent::Stepped
     }
 
     /// Move the program counter forward twice
-    fn skip_pc(&mut self) -> MarsEvent
+    fn skip_pc(&mut self) -> SimulationEvent
     {
         let pc =self.pc().unwrap();
         // TODO: Holy shit this is uuugggglllllyyyy
         *self.current_queue_mut().unwrap().front_mut().unwrap() = 
             (pc + 2) % self.size() as Address;
-        MarsEvent::Skipped
+        SimulationEvent::Skipped
     }
 
     /// Jump the program counter by an offset
     ///
     /// # Arguments
     /// * `offset`: amount to jump
-    fn jump_pc(&mut self, offset: Offset) -> MarsEvent
+    fn jump_pc(&mut self, offset: Offset) -> SimulationEvent
     {
         let pc = self.pc().unwrap();
         // TODO: Holy shit this is uuugggglllllyyyy
         *self.current_queue_mut().unwrap().front_mut().unwrap() = 
             self.calc_addr_offset(pc, offset);
-        MarsEvent::Jumped
+        SimulationEvent::Jumped
     }
 
     /// Move the program counter forward by one and then queue the program
     /// counter onto the current queue
-    fn step_and_queue_pc(&mut self) -> MarsEvent
+    fn step_and_queue_pc(&mut self) -> SimulationEvent
     {
         self.step_pc();
 
         let pc = self.pc().unwrap();
         self.current_queue_mut().unwrap().push_back(pc);
-        MarsEvent::Stepped
+        SimulationEvent::Stepped
     }
 
     /// Move the program counter forward twice and then queue the program
     /// counter onto the current queue
-    fn skip_and_queue_pc(&mut self) -> MarsEvent
+    fn skip_and_queue_pc(&mut self) -> SimulationEvent
     {
         self.skip_pc();
 
         let pc = self.pc().unwrap();
         self.current_queue_mut().unwrap().push_back(pc);
-        MarsEvent::Skipped
+        SimulationEvent::Skipped
     }
 
     /// Jump the program counter by an offset and then queue the program
@@ -587,13 +591,13 @@ impl Mars
     ///
     /// # Arguments
     /// * `offset`: amount to jump by
-    fn jump_and_queue_pc(&mut self, offset: Offset) -> MarsEvent
+    fn jump_and_queue_pc(&mut self, offset: Offset) -> SimulationEvent
     {
         self.jump_pc(offset);
         
         let new_pc = self.pc().unwrap();
         self.current_queue_mut().unwrap().push_back(new_pc);
-        MarsEvent::Jumped
+        SimulationEvent::Jumped
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -695,16 +699,16 @@ impl Mars
     /// Execute `dat` instruction
     ///
     /// Supported OpModes: None
-    fn exec_dat(&mut self) -> MarsEvent
+    fn exec_dat(&mut self) -> SimulationEvent
     {
         self.process_count -= 1;
-        MarsEvent::Terminated
+        SimulationEvent::Terminated
     }
 
     /// Execute `mov` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_mov(&mut self) -> MarsEvent
+    fn exec_mov(&mut self) -> SimulationEvent
     {
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
@@ -734,7 +738,7 @@ impl Mars
     /// Execute `add` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_add(&mut self) -> MarsEvent
+    fn exec_add(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
@@ -765,7 +769,7 @@ impl Mars
     /// Execute `sub` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_sub(&mut self) -> MarsEvent
+    fn exec_sub(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
@@ -796,7 +800,7 @@ impl Mars
     /// Execute `mul` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mul(&mut self) -> MarsEvent
+    fn exec_mul(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
@@ -827,7 +831,7 @@ impl Mars
     /// Execute `div` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_div(&mut self) -> MarsEvent
+    fn exec_div(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         // TODO: division by zero needs to kill the process
@@ -859,7 +863,7 @@ impl Mars
     /// Execute `mod` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
-    fn exec_mod(&mut self) -> MarsEvent
+    fn exec_mod(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         // TODO: division by zero needs to kill the process
@@ -891,7 +895,7 @@ impl Mars
     /// Execute `jmp` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_jmp(&mut self) -> MarsEvent
+    fn exec_jmp(&mut self) -> SimulationEvent
     {
         match self.ir.a.mode {
             AddressingMode::Immediate
@@ -904,13 +908,13 @@ impl Mars
             _ => unimplemented!()
         };
 
-        MarsEvent::Jumped
+        SimulationEvent::Jumped
     }
 
     /// Execute `jmz` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_jmz(&mut self) -> MarsEvent
+    fn exec_jmz(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
         let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
@@ -935,7 +939,7 @@ impl Mars
     /// Execute `jmn` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_jmn(&mut self) -> MarsEvent
+    fn exec_jmn(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
         let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
@@ -960,7 +964,7 @@ impl Mars
     /// Execute `djn` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_djn(&mut self) -> MarsEvent
+    fn exec_djn(&mut self) -> SimulationEvent
     {
         // predecrement the instruction before checking if its not zero
         let mut b = self.fetch_effective_b();
@@ -985,7 +989,7 @@ impl Mars
     /// Execute `spl` instruction
     ///
     /// Supported OpModes: `B`
-    fn exec_spl(&mut self) -> MarsEvent
+    fn exec_spl(&mut self) -> SimulationEvent
     {
         if self.process_count() < self.max_processes(){
             let target = self.effective_addr_a();
@@ -993,7 +997,7 @@ impl Mars
             self.current_queue_mut().unwrap().push_back(target);
             self.step_and_queue_pc();
             self.process_count += 1;
-            MarsEvent::Split
+            SimulationEvent::Split
         } else {
             self.step_and_queue_pc()
         }
@@ -1002,7 +1006,7 @@ impl Mars
     /// Execute `seq` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_seq(&mut self) -> MarsEvent
+    fn exec_seq(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
@@ -1025,7 +1029,7 @@ impl Mars
     /// Execute `sne` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_sne(&mut self) -> MarsEvent
+    fn exec_sne(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
@@ -1048,7 +1052,7 @@ impl Mars
     /// Execute `slt` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_slt(&mut self) -> MarsEvent
+    fn exec_slt(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
@@ -1071,7 +1075,7 @@ impl Mars
     /// Execute `ldp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_ldp(&mut self) -> MarsEvent
+    fn exec_ldp(&mut self) -> SimulationEvent
     {
         unimplemented!();
     }
@@ -1079,13 +1083,13 @@ impl Mars
     /// Execute `stp` instruction
     ///
     /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
-    fn exec_stp(&mut self) -> MarsEvent
+    fn exec_stp(&mut self) -> SimulationEvent
     {
         unimplemented!();
     }
 
     /// Execute 'nop' instruction
-    fn exec_nop(&mut self) -> MarsEvent
+    fn exec_nop(&mut self) -> SimulationEvent
     {
         self.step_and_queue_pc()
     }
