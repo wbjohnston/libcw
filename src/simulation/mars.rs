@@ -32,9 +32,6 @@ pub enum LoadError
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SimulationEvent
 {
-    /// All processes terminated successfully
-    Finished,
-
     /// Game ended in a tie
     Tied,
 
@@ -191,12 +188,11 @@ impl Mars
         // If no there are no processes left
         if self.process_queue.is_empty() {
             self.halted = true;
-            return Ok(SimulationEvent::Finished);
+        } else {
+            // Fetch new queue
+            let q = self.process_queue.pop_front().unwrap();
+            self.process_queue.push_back(q);
         }
-
-        // Fetch new queue
-        let q = self.process_queue.pop_front().unwrap();
-        self.process_queue.push_back(q);
 
         self.cycle += 1;
         Ok(exec_event)
@@ -438,7 +434,7 @@ impl Mars
     /// Execute the instrcution in the `Instruction` register
     fn execute(&mut self) -> SimulationEvent
     {
-        match self.ir.op.code {
+        let e = match self.ir.op.code {
             OpCode::Dat => self.exec_dat(),
             OpCode::Mov => self.exec_mov(),
             OpCode::Add => self.exec_add(),
@@ -457,7 +453,11 @@ impl Mars
             OpCode::Ldp => self.exec_ldp(),
             OpCode::Stp => self.exec_stp(),
             OpCode::Nop => self.exec_nop(),
-        }
+        };
+
+        // pop old program counter
+        self.current_queue_mut().unwrap().pop_front();
+        e
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -1095,8 +1095,111 @@ impl Mars
 }
 
 #[cfg(test)]
-mod tests
+mod test_mars
 {
+    use simulation::MarsBuilder;
+    use super::*;
 
+    #[test]
+    fn test_load_batch_fails_empty_vector()
+    {
+        let mut mars = MarsBuilder::new().build();
+
+        let result = mars.load_batch(vec![]);
+
+        assert_eq!(Err(LoadError::EmptyLoad), result);
+    }
+
+    #[test]
+    fn test_load_suceeds()
+    {
+        let mut mars = MarsBuilder::new().build();
+        let max_length = mars.max_length();
+    
+        let result = mars.load(
+            0,
+            None,
+            &vec![Instruction::default(); max_length - 1]
+            );
+
+        assert_eq!(Ok(()), result);
+    }
+
+    #[test]
+    fn test_load_fails_program_too_long()
+    {
+        let mut mars = MarsBuilder::new().build();
+        let max_length = mars.max_length();
+
+        let result = mars.load(
+            0,
+            None, 
+            &vec![Instruction::default(); max_length + 1]
+            );
+
+        assert_eq!(Err(LoadError::InvalidLength), result);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_load_batch_load_fails_invalid_margin()
+    {
+    }
+
+    #[test]
+    #[ignore]
+    fn test_batch_load_succeeds()
+    {
+    }
+
+    #[test]
+    fn test_step_errors_when_halted()
+    {
+        let mut mars = MarsBuilder::new().build();
+        let result = mars.step();
+
+        assert_eq!(Err(SimulationError::Halted), result);
+    }
+
+    #[test]
+    fn test_dat()
+    {
+        let mut mars = MarsBuilder::new().build_and_load(vec![
+            (0, None, &vec![Instruction::default(); 1])
+            ])
+            .unwrap();
+
+        let result = mars.step();
+        assert_eq!(Ok(SimulationEvent::Terminated), result);
+    }
+
+    #[test]
+    fn test_step_returns_stepped_on_mov()
+    {
+        let prog = vec![
+            Instruction {
+                op: OpField {
+                    code: OpCode::Mov,
+                    mode: OpMode::I
+                },
+                a: Field {
+                    offset: 0,
+                    mode: AddressingMode::Direct,
+                },
+                b: Field {
+                    offset: 1,
+                    mode: AddressingMode::Direct,
+                }
+            },
+        ];
+
+        let mut mars = MarsBuilder::new().build_and_load(vec![
+            (0, None, &prog)
+            ])
+            .unwrap();
+
+        let result = mars.step();
+        assert_eq!(Ok(SimulationEvent::Stepped), result);
+    }
 }
 
