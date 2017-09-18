@@ -1,6 +1,8 @@
 //! An example of running a core with the common warrior, the imp, loaded.
 
 use std::cmp;
+use std::thread;
+use std::time;
 
 extern crate libcw;
 use libcw::redcode::*;
@@ -61,7 +63,8 @@ fn main()
 
     // run
     while !mars.halted() {
-        let event = mars.step(); 
+        thread::sleep(time::Duration::from_millis(1000));
+        let _ = mars.step(); 
         display_mars_state(&mars, 5);
     }
 }

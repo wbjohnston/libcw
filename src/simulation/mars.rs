@@ -338,6 +338,12 @@ impl Mars
         self.memory.len()
     }
 
+    /// Size of private storage space
+    pub fn pspace_size(&self) -> usize
+    {
+        self.pspace_size
+    }
+
     /// Version of core multiplied by `100`
     pub fn version(&self) -> usize
     {
