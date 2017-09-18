@@ -76,9 +76,6 @@ pub struct Mars
     /// Has the core finished executing
     pub(super) halted:        bool,
 
-    /// Number of processes currently running on the `MARS`
-    pub(super) process_count: usize,
-
     // Load constraints
     /// Maximum length of programs when loading
     pub(super) max_length:    usize,
@@ -207,7 +204,7 @@ impl Mars
 
     /// Has the core finished its execution. This can mean either a tie has
     /// occurred or a warrior has emerged victoriors
-    pub fn halted(&mut self) -> bool
+    pub fn halted(&self) -> bool
     {
         self.halted
     }
@@ -230,7 +227,6 @@ impl Mars
         self.process_queue.clear();
 
         self.cycle         = 0;
-        self.process_count = 0;
         self.ir            = Instruction::default();
         self.halted        = true;
     }
@@ -260,7 +256,7 @@ impl Mars
         if valid_length {
             // load program into memory
             let size = self.size();
-            let pin = pin.unwrap_or(self.process_count as Pid);
+            let pin = pin.unwrap_or(self.process_count() as Pid);
             for i in 0..prog.len() {
                 self.memory[(i + dest as usize) % size] = prog[i];
             }
@@ -276,7 +272,6 @@ impl Mars
             q.push_front(dest);
             self.process_queue.push_front((pin, q));
 
-            self.process_count += 1;
             self.halted = false;
             Ok(())
         } else {
@@ -329,7 +324,13 @@ impl Mars
     /// Get the program counters for all processes
     pub fn pcs(&self) -> Vec<Address>
     {
-        unimplemented!();
+        let mut pcs = vec![];
+
+        for &(_, ref q) in &self.process_queue {
+            pcs.extend(q.iter().cloned());
+        }
+
+        pcs
     }
 
     /// Current cycle core is executing
@@ -405,13 +406,13 @@ impl Mars
     /// Get immutable reference to memory
     pub fn memory(&self) -> &[Instruction]
     {
-        &self.memory.as_slice()
+        self.memory.as_slice()
     }
 
     /// Get the number of processes currently running
     pub fn process_count(&self) -> usize
     {
-        self.process_count
+        self.process_queue.iter().map(|&(_, ref q)| q.len()).sum()
     }
 
     /// Fetch reference to current queue
@@ -701,7 +702,6 @@ impl Mars
     /// Supported OpModes: None
     fn exec_dat(&mut self) -> SimulationEvent
     {
-        self.process_count -= 1;
         SimulationEvent::Terminated
     }
 
@@ -996,7 +996,6 @@ impl Mars
 
             self.current_queue_mut().unwrap().push_back(target);
             self.step_and_queue_pc();
-            self.process_count += 1;
             SimulationEvent::Split
         } else {
             self.step_and_queue_pc()
@@ -1093,5 +1092,11 @@ impl Mars
     {
         self.step_and_queue_pc()
     }
+}
+
+#[cfg(test)]
+mod tests
+{
+
 }
 

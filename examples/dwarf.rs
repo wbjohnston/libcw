@@ -1,6 +1,5 @@
 //! An example of running a core with the common warrior, the dwarf, loaded.
 
-use std::cmp;
 use std::thread;
 use std::time;
 

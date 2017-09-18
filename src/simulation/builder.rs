@@ -7,7 +7,7 @@ use simulation::Mars;
 use simulation::LoadResult;
 
 // Mars defaults
-const DEFAULT_CORE_SIZE: usize     = 8000;
+const DEFAULT_SIZE: usize          = 8000;
 const DEFAULT_PSPACE_SIZE: usize   = 500;
 const DEFAULT_MAX_CYCLES: usize    = 80000;
 const DEFAULT_MAX_PROCESSES: usize = 8000;
@@ -32,7 +32,7 @@ pub enum BuilderError
 pub struct MarsBuilder
 {
     /// Size of core's memory buffer
-    core_size:     usize,
+    size:     usize,
 
     /// Size of each warrior's p-space
     pspace_size:   usize,
@@ -59,7 +59,7 @@ impl MarsBuilder
     pub fn new() -> Self
     {
         MarsBuilder {
-            core_size:     DEFAULT_CORE_SIZE,
+            size:          DEFAULT_SIZE,
             pspace_size:   DEFAULT_PSPACE_SIZE,
             max_cycles:    DEFAULT_MAX_CYCLES,
             max_processes: DEFAULT_MAX_PROCESSES,
@@ -84,7 +84,7 @@ impl MarsBuilder
     pub fn build(&self) -> Mars
     {
         // create core resources
-        let mem    = vec![Instruction::default(); self.core_size];
+        let mem    = vec![Instruction::default(); self.size];
         let pq     = VecDeque::new();
         let pspace = HashMap::new();
 
@@ -93,7 +93,6 @@ impl MarsBuilder
             memory:        mem,
             cycle:         0,
             process_queue: pq,
-            process_count: 0,
             pspace:        pspace,
             halted:        true,
             ir:            Instruction::default(),
@@ -119,7 +118,7 @@ impl MarsBuilder
     /// use libcw::simulation::MarsBuilder;
     ///
     /// let core = MarsBuilder::new()
-    ///     .core_size(80)
+    ///     .size(80)
     ///     .build_and_load(vec![])
     ///     .unwrap();
     ///
@@ -131,9 +130,9 @@ impl MarsBuilder
     ///
     /// # Return
     /// `Self`
-    pub fn core_size(&mut self, size: usize) -> &mut Self
+    pub fn size(&mut self, size: usize) -> &mut Self
     {
-        self.core_size = size;
+        self.size = size;
         self
     }
 
