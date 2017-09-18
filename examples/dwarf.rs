@@ -105,7 +105,7 @@ fn main()
 
     // run
     while !mars.halted() {
-        thread::sleep_ms(time::Duration::from_millis(1000));
+        thread::sleep(time::Duration::from_millis(1000));
         let _ = mars.step(); 
         display_mars_state(&mars, 5);
     }
