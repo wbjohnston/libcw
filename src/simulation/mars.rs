@@ -68,7 +68,7 @@ pub struct Mars
     pub(super) process_queue: VecDeque<(Pid, VecDeque<Address>)>,
 
     /// Private storage space for warriors
-    pub(super) pspace:        HashMap<Pin, Vec<Instruction>>,
+    pub(super) pspace:        HashMap<Pin, Vec<Offset>>,
 
     /// Has the core finished executing
     pub(super) halted:        bool,
@@ -258,10 +258,7 @@ impl Mars
             }
 
             // Create pspace
-            self.pspace.insert(
-                pin,
-                vec![Instruction::default(); self.pspace_size]
-                );
+            self.pspace.insert(pin, vec![0; self.pspace_size]);
 
             // Add to process queue
             let mut q = VecDeque::new();
@@ -622,12 +619,12 @@ impl Mars
     /// * `pin`: programs pin, used as a lookup key
     /// * `addr`: address in the pspace to store
     /// * `instr`: instruction to store
-    fn store_pspace(&mut self, pin: Pin, addr: Address, instr: Instruction)
+    fn store_pspace(&mut self, pin: Pin, addr: Address, value: Offset)
         -> Result<(), ()>
     {
         if let Some(pspace) = self.pspace.get_mut(&pin) {
             let pspace_size = pspace.len();
-            pspace[addr as usize % pspace_size] = instr;
+            pspace[addr as usize % pspace_size] = value;
             Ok(())
         } else {
             Err(())
@@ -670,7 +667,7 @@ impl Mars
     /// # Arguments
     /// * `pin`: pin of program, used as lookup key
     /// * `addr`: address of pspace to access
-    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Result<Instruction, ()>
+    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Result<Offset, ()>
     {
         if let Some(pspace) = self.pspace.get(&pin) {
             Ok(pspace[addr as usize % pspace.len()])
