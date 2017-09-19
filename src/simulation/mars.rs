@@ -41,6 +41,9 @@ pub enum SimulationEvent
     /// A process terminated
     Terminated,
 
+    /// The Mars halted
+    Halted,
+
     /// A process jumped address
     Jumped,
 
@@ -51,7 +54,7 @@ pub enum SimulationEvent
     Stepped,
 }
 
-/// Mars wars runtime
+/// Core wars runtime
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Mars
 {
@@ -104,12 +107,12 @@ impl Mars
             return Err(SimulationError::Halted);
         }
 
-        if self.cycle() >= self.max_cycles() {
+        else if self.cycle() >= self.max_cycles() {
             self.halted = true;
             return Ok(SimulationEvent::MaxCyclesReached)
         }
 
-        let pc = self.pc().unwrap();
+        let pc = self.pc();
 
         // Fetch instruction
         self.ir = self.fetch(pc);
@@ -180,22 +183,21 @@ impl Mars
         }
 
         // check if there are any more process queues running on the core
-        if !self.current_queue().unwrap().is_empty() {
-            let q = self.process_queue.pop_front().unwrap();
-            self.process_queue.push_back(q);
+        let (pid, q) = self.process_queue.pop_front().unwrap();
+        if !q.is_empty() {
+            self.process_queue.push_back((pid, q));
         }
 
         // If no there are no processes left
         if self.process_queue.is_empty() {
-            self.halted = true;
+            Ok(self.halt())
         } else {
             // Fetch new queue
             let q = self.process_queue.pop_front().unwrap();
             self.process_queue.push_back(q);
+            self.cycle += 1;
+            Ok(exec_event)
         }
-
-        self.cycle += 1;
-        Ok(exec_event)
     }
 
     /// Has the core finished its execution. This can mean either a tie has
@@ -206,10 +208,10 @@ impl Mars
     }
 
     /// Halt the Mars
-    pub fn halt(&mut self) -> &mut Self
+    fn halt(&mut self) -> SimulationEvent
     {
         self.halted = true;
-        self
+        SimulationEvent::Halted
     }
 
     /// Reset the Mars's memory and the process queue
@@ -290,6 +292,8 @@ impl Mars
     pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, &Program)>)
         -> LoadResult<()>
     {
+        // TODO: validate margin
+        // TODO: correct addresses that are out of bounds by modulo-ing them
         if programs.is_empty() {
             return Err(LoadError::EmptyLoad);
         }
@@ -300,7 +304,6 @@ impl Mars
             for &(dest, maybe_pin, ref prog) in programs.iter() {
                 self.load(dest, maybe_pin, prog)?; 
             }
-
             Ok(())
         } else {
             Err(LoadError::InvalidDistance)
@@ -308,17 +311,21 @@ impl Mars
     }
 
     /// Get `Pid` currently executing on the core
-    pub fn pc(&self) -> Option<Address>
+    ///
+    /// # Panics
+    /// * Panics is the process queue is empty
+    pub fn pc(&self) -> Address
     {
-        if let Some(q) = self.current_queue() {
-            if let Some(pc) = q.front() {
-                Some(pc.clone())
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+        self.current_queue().unwrap().front().unwrap().clone()
+    }
+
+    /// Get mutable reference to current program counter
+    ///
+    /// # Panics
+    /// * Panics is the process queue is empty
+    fn pc_mut(&mut self) -> &mut Address
+    {
+        self.current_queue_mut().unwrap().front_mut().unwrap()
     }
 
     /// Get the program counters for all processes
@@ -340,13 +347,10 @@ impl Mars
     }
 
     /// Get the current `Pid` executing
-    pub fn pid(&self) -> Option<Pid>
+    pub fn pid(&self) -> Pid
     {
-        if let Some(&(pid, _)) = self.process_queue.front() {
-            Some(pid)
-        } else {
-            None
-        }
+        let &(pid, _) = self.process_queue.front().unwrap();
+        pid
     }
 
     /// Get all `Pid`s that are currently active in the order they will be 
@@ -354,10 +358,7 @@ impl Mars
     pub fn pids(&self) -> Vec<Pid>
     {
         let mut pids = vec![];
-        if let Some(pid) = self.pid() {
-            pids.push(pid);
-            pids.extend(self.process_queue.iter().map(|&(pid, _)| pid));
-        } 
+        pids.extend(self.process_queue.iter().map(|&(pid, _)| pid));
         pids
     }
 
@@ -444,7 +445,7 @@ impl Mars
     /// Execute the instrcution in the `Instruction` register
     fn execute(&mut self) -> SimulationEvent
     {
-        let e = match self.ir.op.code {
+        match self.ir.op.code {
             OpCode::Dat => self.exec_dat(),
             OpCode::Mov => self.exec_mov(),
             OpCode::Add => self.exec_add(),
@@ -463,11 +464,7 @@ impl Mars
             OpCode::Ldp => self.exec_ldp(),
             OpCode::Stp => self.exec_stp(),
             OpCode::Nop => self.exec_nop(),
-        };
-
-        // pop old program counter
-        self.current_queue_mut().unwrap().pop_front();
-        e
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -505,7 +502,7 @@ impl Mars
             (field.mode, field.value)
         };
 
-        let pc = self.pc().unwrap();
+        let pc = self.pc();
 
         let direct = self.fetch(self.calc_addr_offset(pc, offset));
 
@@ -546,19 +543,17 @@ impl Mars
     /// Move the program counter forward
     fn step_pc(&mut self) -> SimulationEvent
     {
-        let pc = self.pc().unwrap();
-        *self.current_queue_mut().unwrap().front_mut().unwrap() =
-            (pc + 1) % self.size() as Address;
+        let pc = self.pc();
+        *self.pc_mut() = (pc + 1) % self.size() as Address;
         SimulationEvent::Stepped
     }
 
     /// Move the program counter forward twice
     fn skip_pc(&mut self) -> SimulationEvent
     {
-        let pc =self.pc().unwrap();
+        let pc = self.pc();
         // TODO: Holy shit this is uuugggglllllyyyy
-        *self.current_queue_mut().unwrap().front_mut().unwrap() = 
-            (pc + 2) % self.size() as Address;
+        *self.pc_mut() = (pc + 2) % self.size() as Address;
         SimulationEvent::Skipped
     }
 
@@ -568,10 +563,8 @@ impl Mars
     /// * `offset`: amount to jump
     fn jump_pc(&mut self, offset: Value) -> SimulationEvent
     {
-        let pc = self.pc().unwrap();
-        // TODO: Holy shit this is uuugggglllllyyyy
-        *self.current_queue_mut().unwrap().front_mut().unwrap() = 
-            self.calc_addr_offset(pc, offset);
+        let pc = self.pc();
+        *self.pc_mut() = self.calc_addr_offset(pc, offset);
         SimulationEvent::Jumped
     }
 
@@ -581,7 +574,7 @@ impl Mars
     {
         self.step_pc();
 
-        let pc = self.pc().unwrap();
+        let pc = self.current_queue_mut().unwrap().pop_front().unwrap();
         self.current_queue_mut().unwrap().push_back(pc);
         SimulationEvent::Stepped
     }
@@ -592,7 +585,7 @@ impl Mars
     {
         self.skip_pc();
 
-        let pc = self.pc().unwrap();
+        let pc = self.current_queue_mut().unwrap().pop_front().unwrap();
         self.current_queue_mut().unwrap().push_back(pc);
         SimulationEvent::Skipped
     }
@@ -606,8 +599,9 @@ impl Mars
     {
         self.jump_pc(offset);
         
-        let new_pc = self.pc().unwrap();
-        self.current_queue_mut().unwrap().push_back(new_pc);
+        // remove old pc
+        let pc = self.current_queue_mut().unwrap().pop_front().unwrap();
+        self.current_queue_mut().unwrap().push_back(pc);
         SimulationEvent::Jumped
     }
 
@@ -712,6 +706,7 @@ impl Mars
     /// Supported OpModes: None
     fn exec_dat(&mut self) -> SimulationEvent
     {
+        let _ = self.current_queue_mut().unwrap().pop_front();
         SimulationEvent::Terminated
     }
 
@@ -1114,10 +1109,10 @@ mod test_mars
     fn test_load_batch_fails_empty_vector()
     {
         let mut mars = MarsBuilder::new().build();
-
-        let result = mars.load_batch(vec![]);
-
-        assert_eq!(Err(LoadError::EmptyLoad), result);
+        assert_eq!(
+            Err(LoadError::EmptyLoad),
+            mars.load_batch(vec![])
+            );
     }
 
     #[test]
@@ -1125,14 +1120,9 @@ mod test_mars
     {
         let mut mars = MarsBuilder::new().build();
         let max_length = mars.max_length();
-    
-        let result = mars.load(
-            0,
-            None,
-            &vec![Instruction::default(); max_length - 1]
-            );
+        let prog = vec![Instruction::default(); max_length - 1];
 
-        assert_eq!(Ok(()), result);
+        assert_eq!(Ok(()), mars.load(0, None, &prog));
     }
 
     #[test]
@@ -1140,14 +1130,12 @@ mod test_mars
     {
         let mut mars = MarsBuilder::new().build();
         let max_length = mars.max_length();
+        let prog = vec![Instruction::default(); max_length + 1];
 
-        let result = mars.load(
-            0,
-            None, 
-            &vec![Instruction::default(); max_length + 1]
+        assert_eq!(
+            Err(LoadError::InvalidLength),
+            mars.load(0, None, &prog)
             );
-
-        assert_eq!(Err(LoadError::InvalidLength), result);
     }
 
     #[test]
@@ -1176,6 +1164,7 @@ mod test_mars
             .size(16)
             .build();
         
+        // transform the instruction so we can recognize it in memory
         let mut program = vec![Instruction::default(); 4];
         for (i, e) in program.iter_mut().enumerate() {
             e.op.code = OpCode::Mov;
@@ -1228,11 +1217,12 @@ mod test_mars
             .unwrap();
 
         let result = mars.step();
-        assert_eq!(Ok(SimulationEvent::Terminated), result);
+        assert_eq!(Ok(SimulationEvent::Halted), result);
+        assert_eq!(true, mars.halted());
     }
 
     #[test]
-    fn test_step_returns_stepped_on_mov()
+    fn test_mov()
     {
         let prog = vec![
             Instruction {
@@ -1256,8 +1246,77 @@ mod test_mars
             ])
             .unwrap();
 
-        let result = mars.step();
-        assert_eq!(Ok(SimulationEvent::Stepped), result);
+        let init_pc    = mars.pc();
+        let init_cycle = mars.cycle();
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(init_pc + 1,                  mars.pc());
+        assert_eq!(init_cycle + 1,               mars.cycle());
+    }
+
+    #[test]
+    // #[ignore]
+    fn test_spl_cant_create_more_than_max_processes()
+    {
+        // splitter program, infinitely creates imps
+        let prog = vec![
+            Instruction {
+                op: OpField {
+                    code: OpCode::Spl,
+                    mode: OpMode::I
+                },
+                a: Field {
+                    value: 2,
+                    mode: AddressingMode::Direct
+                },
+                b: Field {
+                    value: 1,
+                    mode: AddressingMode::Direct
+                }
+            },
+            Instruction {
+                op: OpField {
+                    code: OpCode::Jmp,
+                    mode: OpMode::I
+                },
+                a: Field {
+                    value: -1,
+                    mode: AddressingMode::Direct
+                },
+                b: Field {
+                    value: 1,
+                    mode: AddressingMode::Direct
+                }
+            },
+            Instruction {
+                op: OpField {
+                    code: OpCode::Mov,
+                    mode: OpMode::I
+                },
+                a: Field {
+                    value: 0,
+                    mode: AddressingMode::Direct
+                },
+                b: Field {
+                    value: 1,
+                    mode: AddressingMode::Direct
+                }
+            },
+        ];
+
+        let mut mars = MarsBuilder::new()
+            .max_processes(10)
+            .build_and_load(vec![(0, None, &prog)])
+            .unwrap();
+
+        assert_eq!(Ok(SimulationEvent::Split), mars.step());
+
+        // run the simulation until it halts because cycles have been exauste
+        while !mars.halted() {
+            let _ = mars.step();
+        }
+        
+        assert_eq!(10, mars.process_count());
     }
 }
 

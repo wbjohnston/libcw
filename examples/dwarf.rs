@@ -14,8 +14,8 @@ use libcw::simulation::{MarsBuilder, Mars};
 /// * `margin`: memory addresses before and after pc to display
 fn display_mars_state(mars: &Mars, margin: usize)
 {
-    let pc = mars.pc().unwrap() as usize;
-    let pid = mars.pid().unwrap();
+    let pc = mars.pc() as usize;
+    let pid = mars.pid();
     let cycle = mars.cycle();
     let size = mars.size();
 
