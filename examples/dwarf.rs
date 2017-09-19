@@ -22,13 +22,24 @@ fn display_mars_state(mars: &Mars, margin: usize)
     // print header
     println!("| Cycle: {} | PC: {} | PID: {} |", cycle, pc, pid);
 
-    let (min, max) = (
-            pc.saturating_sub(margin),
-            pc.saturating_add(margin) % size
-        );
+    let min = if margin > pc {
+        size - (margin - pc) 
+    } else {
+        pc - margin
+    };
 
-    for i in min..max {
-        println!("|{}| {}", i, mars.memory()[i]);
+    let iter = mars.memory().iter()
+        .enumerate()
+        .cycle()
+        .skip(min)
+        .take(margin*2 + 1);
+
+    for (addr, ins) in iter {
+        if addr == pc {
+            println!(">{}< {}", addr, ins);
+        } else {
+            println!("|{}| {}", addr, ins);
+        }
     }
 }
 
@@ -95,7 +106,7 @@ fn main()
 
     // create mars
     let mut mars = MarsBuilder::new()
-        .max_cycles(10)
+        // .max_cycles(10)
         .build_and_load(vec![(4000, None, &dwarf)])
         .unwrap();
 
@@ -104,7 +115,7 @@ fn main()
 
     // run
     while !mars.halted() {
-        thread::sleep(time::Duration::from_millis(1000));
+        // thread::sleep(time::Duration::from_millis(100));
         let _ = mars.step(); 
         display_mars_state(&mars, 5);
     }
