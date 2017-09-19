@@ -402,6 +402,12 @@ impl Mars
         self.memory.as_slice()
     }
 
+    /// Get an immutable reference to private storage
+    pub fn pspace(&self) -> &HashMap<Pin, Vec<Value>>
+    {
+        &self.pspace
+    }
+
     /// Get the number of processes currently running
     pub fn process_count(&self) -> usize
     {
@@ -1139,9 +1145,11 @@ mod test_mars
 
     #[test]
     #[ignore]
-    fn test_load_batch_load_fails_invalid_margin()
+    fn test_load_batch_load_fails_invalid_distance()
     {
-        let mut mars = MarsBuilder::new().min_distance(10).build();
+        let mut mars = MarsBuilder::new()
+            .min_distance(10)
+            .build();
 
         let useless_program = vec![Instruction::default(); 1];
 
@@ -1155,9 +1163,22 @@ mod test_mars
     }
 
     #[test]
-    #[ignore]
     fn test_batch_load_succeeds()
     {
+        let mut mars = MarsBuilder::new()
+            .min_distance(10)
+            .max_length(10)
+            .build();
+
+        let useless_program = vec![Instruction::default(); 9];
+
+        // intentionally load the programs with invalid spacings
+        let result = mars.load_batch(vec![
+            (0, None, &useless_program),
+            (11, None, &useless_program),
+        ]);
+        
+        assert_eq!(Ok(()), result);
     }
 
     #[test]
