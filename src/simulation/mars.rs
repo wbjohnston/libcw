@@ -33,7 +33,7 @@ pub enum LoadError
 pub enum SimulationEvent
 {
     /// Game ended in a tie
-    Tied,
+    MaxCyclesReached,
 
     /// Process split inner contains address of new pc
     Split,
@@ -68,7 +68,7 @@ pub struct Mars
     pub(super) process_queue: VecDeque<(Pid, VecDeque<Address>)>,
 
     /// Private storage space for warriors
-    pub(super) pspace:        HashMap<Pin, Vec<Offset>>,
+    pub(super) pspace:        HashMap<Pin, Vec<Value>>,
 
     /// Has the core finished executing
     pub(super) halted:        bool,
@@ -106,7 +106,7 @@ impl Mars
 
         if self.cycle() >= self.max_cycles() {
             self.halted = true;
-            return Ok(SimulationEvent::Tied)
+            return Ok(SimulationEvent::MaxCyclesReached)
         }
 
         let pc = self.pc().unwrap();
@@ -124,21 +124,21 @@ impl Mars
         // Preincrement phase
         if predecrement {
             // fetch direct target
-            let a_addr = self.calc_addr_offset(pc, self.ir.a.offset);
-            let b_addr = self.calc_addr_offset(pc, self.ir.b.offset);
+            let a_addr = self.calc_addr_offset(pc, self.ir.a.value);
+            let b_addr = self.calc_addr_offset(pc, self.ir.b.value);
             let mut a = self.fetch(a_addr);
             let mut b = self.fetch(b_addr);
 
             // FIXME: combine these into a single match statement
             match a_mode {
-                AddressingMode::AIndirectPreDecrement => a.a.offset -= 1,
-                AddressingMode::BIndirectPreDecrement => a.b.offset -= 1,
+                AddressingMode::AIndirectPreDecrement => a.a.value -= 1,
+                AddressingMode::BIndirectPreDecrement => a.b.value -= 1,
                 _ => { /* Do nothing */ }
             };
 
             match b_mode {
-                AddressingMode::AIndirectPreDecrement => b.a.offset -= 1,
-                AddressingMode::BIndirectPreDecrement => b.b.offset -= 1,
+                AddressingMode::AIndirectPreDecrement => b.a.value -= 1,
+                AddressingMode::BIndirectPreDecrement => b.b.value -= 1,
                 _ => { /* Do nothing */ }
             };
             self.store(a_addr, a);
@@ -157,21 +157,21 @@ impl Mars
 
         if postincrement {
             // fetch direct target
-            let a_addr = self.calc_addr_offset(pc, self.ir.a.offset);
-            let b_addr = self.calc_addr_offset(pc, self.ir.b.offset);
+            let a_addr = self.calc_addr_offset(pc, self.ir.a.value);
+            let b_addr = self.calc_addr_offset(pc, self.ir.b.value);
             let mut a = self.fetch(a_addr);
             let mut b = self.fetch(b_addr);
 
             // FIXME: combine these into a single match statement
             match a_mode {
-                AddressingMode::AIndirectPostIncrement => a.a.offset += 1,
-                AddressingMode::BIndirectPostIncrement => a.b.offset += 1,
+                AddressingMode::AIndirectPostIncrement => a.a.value += 1,
+                AddressingMode::BIndirectPostIncrement => a.b.value += 1,
                 _ => { /* Do nothing */ }
             };
 
             match b_mode {
-                AddressingMode::AIndirectPostIncrement => b.a.offset += 1,
-                AddressingMode::BIndirectPostIncrement => b.b.offset += 1,
+                AddressingMode::AIndirectPostIncrement => b.a.value += 1,
+                AddressingMode::BIndirectPostIncrement => b.b.value += 1,
                 _ => { /* Do nothing */ }
             };
             // store result
@@ -467,7 +467,7 @@ impl Mars
     /// * `base`: base address
     /// * `offset`: distance from base to calculate
     #[inline]
-    fn calc_addr_offset(&self, base: Address, offset: Offset) -> Address
+    fn calc_addr_offset(&self, base: Address, offset: Value) -> Address
     {
         if offset < 0 {
             (base.wrapping_sub(-offset as Address) % self.size() as Address)
@@ -489,7 +489,7 @@ impl Mars
         // fetch the addressing mode and offset
         let (mode, offset) = {
             let field = if use_a_field { self.ir.a } else { self.ir.b };
-            (field.mode, field.offset)
+            (field.mode, field.value)
         };
 
         let pc = self.pc().unwrap();
@@ -502,11 +502,11 @@ impl Mars
             AIndirect
                 | AIndirectPreDecrement
                 | AIndirectPostIncrement =>
-                self.calc_addr_offset(pc, direct.a.offset + offset),
+                self.calc_addr_offset(pc, direct.a.value + offset),
             BIndirect
                 | BIndirectPreDecrement
                 | BIndirectPostIncrement =>
-                self.calc_addr_offset(pc, direct.b.offset + offset),
+                self.calc_addr_offset(pc, direct.b.value + offset),
         }
     }
 
@@ -553,7 +553,7 @@ impl Mars
     ///
     /// # Arguments
     /// * `offset`: amount to jump
-    fn jump_pc(&mut self, offset: Offset) -> SimulationEvent
+    fn jump_pc(&mut self, offset: Value) -> SimulationEvent
     {
         let pc = self.pc().unwrap();
         // TODO: Holy shit this is uuugggglllllyyyy
@@ -589,7 +589,7 @@ impl Mars
     ///
     /// # Arguments
     /// * `offset`: amount to jump by
-    fn jump_and_queue_pc(&mut self, offset: Offset) -> SimulationEvent
+    fn jump_and_queue_pc(&mut self, offset: Value) -> SimulationEvent
     {
         self.jump_pc(offset);
         
@@ -619,7 +619,7 @@ impl Mars
     /// * `pin`: programs pin, used as a lookup key
     /// * `addr`: address in the pspace to store
     /// * `instr`: instruction to store
-    fn store_pspace(&mut self, pin: Pin, addr: Address, value: Offset)
+    fn store_pspace(&mut self, pin: Pin, addr: Address, value: Value)
         -> Result<(), ()>
     {
         if let Some(pspace) = self.pspace.get_mut(&pin) {
@@ -667,7 +667,7 @@ impl Mars
     /// # Arguments
     /// * `pin`: pin of program, used as lookup key
     /// * `addr`: address of pspace to access
-    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Result<Offset, ()>
+    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Result<Value, ()>
     {
         if let Some(pspace) = self.pspace.get(&pin) {
             Ok(pspace[addr as usize % pspace.len()])
@@ -742,20 +742,20 @@ impl Mars
         let mut b = self.fetch_effective_b();
 
         match self.ir.op.mode {
-            OpMode::A  => b.a.offset = (b.a.offset + a.a.offset) % self.size() as Offset,
-            OpMode::B  => b.b.offset = (b.b.offset + a.b.offset) % self.size() as Offset,
-            OpMode::BA => b.a.offset = (b.a.offset + a.b.offset) % self.size() as Offset,
-            OpMode::AB => b.b.offset = (b.b.offset + a.a.offset) % self.size() as Offset,
+            OpMode::A  => b.a.value = (b.a.value + a.a.value) % self.size() as Value,
+            OpMode::B  => b.b.value = (b.b.value + a.b.value) % self.size() as Value,
+            OpMode::BA => b.a.value = (b.a.value + a.b.value) % self.size() as Value,
+            OpMode::AB => b.b.value = (b.b.value + a.a.value) % self.size() as Value,
             OpMode::F
                 | OpMode::I =>
             {
-                b.a.offset = (b.a.offset + a.a.offset) % self.size() as Offset;
-                b.b.offset = (b.b.offset + a.b.offset) % self.size() as Offset;
+                b.a.value = (b.a.value + a.a.value) % self.size() as Value;
+                b.b.value = (b.b.value + a.b.value) % self.size() as Value;
             },
             OpMode::X =>
             {
-                b.b.offset = (b.b.offset + a.a.offset) % self.size() as Offset;
-                b.a.offset = (b.a.offset + a.b.offset) % self.size() as Offset;
+                b.b.value = (b.b.value + a.a.value) % self.size() as Value;
+                b.a.value = (b.a.value + a.b.value) % self.size() as Value;
             },
         }
 
@@ -773,20 +773,20 @@ impl Mars
         let mut b = self.fetch_effective_b();
 
         match self.ir.op.mode {
-            OpMode::A => b.a.offset -= a.a.offset,
-            OpMode::B => b.b.offset -= a.b.offset,
-            OpMode::BA =>b.a.offset -= a.b.offset,
-            OpMode::AB =>b.b.offset -= a.a.offset,
+            OpMode::A => b.a.value -= a.a.value,
+            OpMode::B => b.b.value -= a.b.value,
+            OpMode::BA =>b.a.value -= a.b.value,
+            OpMode::AB =>b.b.value -= a.a.value,
             OpMode::F
                 | OpMode::I =>
             {
-                b.a.offset -= a.a.offset;
-                b.b.offset -= a.b.offset;
+                b.a.value -= a.a.value;
+                b.b.value -= a.b.value;
             },
             OpMode::X =>
             {
-                b.b.offset -= a.a.offset;
-                b.a.offset -= a.b.offset;
+                b.b.value -= a.a.value;
+                b.a.value -= a.b.value;
             },
         }
 
@@ -804,20 +804,20 @@ impl Mars
         let mut b = self.fetch_effective_b();
 
         match self.ir.op.mode {
-            OpMode::A => b.a.offset *= a.a.offset,
-            OpMode::B => b.b.offset *= a.b.offset,
-            OpMode::BA =>b.a.offset *= a.b.offset,
-            OpMode::AB =>b.b.offset *= a.a.offset,
+            OpMode::A => b.a.value *= a.a.value,
+            OpMode::B => b.b.value *= a.b.value,
+            OpMode::BA =>b.a.value *= a.b.value,
+            OpMode::AB =>b.b.value *= a.a.value,
             OpMode::F
                 | OpMode::I =>
             {
-                b.a.offset *= a.a.offset;
-                b.b.offset *= a.b.offset;
+                b.a.value *= a.a.value;
+                b.b.value *= a.b.value;
             },
             OpMode::X =>
             {
-                b.b.offset *= a.a.offset;
-                b.a.offset *= a.b.offset;
+                b.b.value *= a.a.value;
+                b.a.value *= a.b.value;
             },
         }
 
@@ -836,20 +836,20 @@ impl Mars
         let mut b = self.fetch_effective_b();
 
         match self.ir.op.mode {
-            OpMode::A => b.a.offset /= a.a.offset,
-            OpMode::B => b.b.offset /= a.b.offset,
-            OpMode::BA =>b.a.offset /= a.b.offset,
-            OpMode::AB =>b.b.offset /= a.a.offset,
+            OpMode::A => b.a.value /= a.a.value,
+            OpMode::B => b.b.value /= a.b.value,
+            OpMode::BA =>b.a.value /= a.b.value,
+            OpMode::AB =>b.b.value /= a.a.value,
             OpMode::F
                 | OpMode::I =>
             {
-                b.a.offset /= a.a.offset;
-                b.b.offset /= a.b.offset;
+                b.a.value /= a.a.value;
+                b.b.value /= a.b.value;
             },
             OpMode::X =>
             {
-                b.b.offset /= a.a.offset;
-                b.a.offset /= a.b.offset;
+                b.b.value /= a.a.value;
+                b.a.value /= a.b.value;
             },
         }
 
@@ -868,20 +868,20 @@ impl Mars
         let mut b = self.fetch_effective_b();
 
         match self.ir.op.mode {
-            OpMode::A => b.a.offset %= a.a.offset,
-            OpMode::B => b.b.offset %= a.b.offset,
-            OpMode::BA =>b.a.offset %= a.b.offset,
-            OpMode::AB =>b.b.offset %= a.a.offset,
+            OpMode::A => b.a.value %= a.a.value,
+            OpMode::B => b.b.value %= a.b.value,
+            OpMode::BA =>b.a.value %= a.b.value,
+            OpMode::AB =>b.b.value %= a.a.value,
             OpMode::F
                 | OpMode::I =>
             {
-                b.a.offset %= a.a.offset;
-                b.b.offset %= a.b.offset;
+                b.a.value %= a.a.value;
+                b.b.value %= a.b.value;
             },
             OpMode::X =>
             {
-                b.b.offset %= a.a.offset;
-                b.a.offset %= a.b.offset;
+                b.b.value %= a.a.value;
+                b.a.value %= a.b.value;
             },
         }
 
@@ -898,7 +898,7 @@ impl Mars
             AddressingMode::Immediate
                 | AddressingMode::Direct =>
             {
-                let offset = self.ir.a.offset;
+                let offset = self.ir.a.value;
                 self.jump_and_queue_pc(offset);
             }
             // TODO
@@ -914,16 +914,16 @@ impl Mars
     fn exec_jmz(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
-        let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
+        let offset = self.ir.a.value; // TODO: needs to calculate jump offset
 
         let jump = match self.ir.op.mode {
             OpMode::A
-                | OpMode::BA => b.a.offset == 0,
+                | OpMode::BA => b.a.value == 0,
             OpMode::B
-                | OpMode::AB => b.b.offset == 0,
+                | OpMode::AB => b.b.value == 0,
             OpMode::F
                 | OpMode::I
-                | OpMode::X => b.a.offset == 0 && b.b.offset == 0,
+                | OpMode::X => b.a.value == 0 && b.b.value == 0,
         };
 
         if jump {
@@ -939,16 +939,16 @@ impl Mars
     fn exec_jmn(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
-        let offset = self.ir.a.offset; // TODO: needs to calculate jump offset
+        let offset = self.ir.a.value; // TODO: needs to calculate jump offset
 
         let jump = match self.ir.op.mode {
             OpMode::A
-                | OpMode::BA => b.a.offset != 0,
+                | OpMode::BA => b.a.value != 0,
             OpMode::B
-                | OpMode::AB => b.b.offset != 0,
+                | OpMode::AB => b.b.value != 0,
             OpMode::F
                 | OpMode::I
-                | OpMode::X => b.a.offset != 0 && b.b.offset != 0,
+                | OpMode::X => b.a.value != 0 && b.b.value != 0,
         };
 
         if jump {
@@ -967,15 +967,15 @@ impl Mars
         let mut b = self.fetch_effective_b();
         match self.ir.op.mode {
             OpMode::A
-                | OpMode::BA => b.a.offset -= 1,
+                | OpMode::BA => b.a.value -= 1,
             OpMode::B
-                | OpMode::AB => b.b.offset -= 1,
+                | OpMode::AB => b.b.value -= 1,
             OpMode::F
                 | OpMode::I
                 | OpMode::X =>
             {
-                b.a.offset -= 1;
-                b.b.offset -= 1;
+                b.a.value -= 1;
+                b.b.value -= 1;
             }
         }
         self.store_effective_b(b);
@@ -1008,15 +1008,15 @@ impl Mars
         let b = self.fetch_effective_b();
 
         let skip = match self.ir.op.mode {
-            OpMode::A       => a.a.offset == b.b.offset,
-            OpMode::B       => a.b.offset == b.b.offset,
-            OpMode::BA      => a.a.offset == b.b.offset,
-            OpMode::AB      => a.b.offset == b.a.offset,
-            OpMode::X       => a.b.offset == b.a.offset &&
-                               a.a.offset == b.b.offset,
+            OpMode::A       => a.a.value == b.b.value,
+            OpMode::B       => a.b.value == b.b.value,
+            OpMode::BA      => a.a.value == b.b.value,
+            OpMode::AB      => a.b.value == b.a.value,
+            OpMode::X       => a.b.value == b.a.value &&
+                               a.a.value == b.b.value,
             OpMode::F
-                | OpMode::I => a.a.offset == b.a.offset &&
-                               a.b.offset == b.b.offset,
+                | OpMode::I => a.a.value == b.a.value &&
+                               a.b.value == b.b.value,
         };
 
         if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
@@ -1031,15 +1031,15 @@ impl Mars
         let b = self.fetch_effective_b();
 
         let skip = match self.ir.op.mode {
-            OpMode::A       => a.a.offset != b.b.offset,
-            OpMode::B       => a.b.offset != b.b.offset,
-            OpMode::BA      => a.a.offset != b.b.offset,
-            OpMode::AB      => a.b.offset != b.a.offset,
-            OpMode::X       => a.b.offset != b.a.offset &&
-                               a.a.offset != b.b.offset,
+            OpMode::A       => a.a.value != b.b.value,
+            OpMode::B       => a.b.value != b.b.value,
+            OpMode::BA      => a.a.value != b.b.value,
+            OpMode::AB      => a.b.value != b.a.value,
+            OpMode::X       => a.b.value != b.a.value &&
+                               a.a.value != b.b.value,
             OpMode::F
-                | OpMode::I => a.a.offset != b.a.offset &&
-                               a.b.offset != b.b.offset,
+                | OpMode::I => a.a.value != b.a.value &&
+                               a.b.value != b.b.value,
         };
 
         if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
@@ -1054,15 +1054,15 @@ impl Mars
         let b = self.fetch_effective_b();
 
         let skip = match self.ir.op.mode {
-            OpMode::A       => a.a.offset < b.b.offset,
-            OpMode::B       => a.b.offset < b.b.offset,
-            OpMode::BA      => a.a.offset < b.b.offset,
-            OpMode::AB      => a.b.offset < b.a.offset,
-            OpMode::X       => a.b.offset < b.a.offset &&
-                               a.a.offset < b.b.offset,
+            OpMode::A       => a.a.value < b.b.value,
+            OpMode::B       => a.b.value < b.b.value,
+            OpMode::BA      => a.a.value < b.b.value,
+            OpMode::AB      => a.b.value < b.a.value,
+            OpMode::X       => a.b.value < b.a.value &&
+                               a.a.value < b.b.value,
             OpMode::F
-                | OpMode::I => a.a.offset < b.a.offset &&
-                               a.b.offset < b.b.offset,
+                | OpMode::I => a.a.value < b.a.value &&
+                               a.b.value < b.b.value,
         };
 
         if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }

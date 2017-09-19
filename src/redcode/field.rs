@@ -2,13 +2,13 @@
 
 use std::fmt;
 
-use redcode::{Offset, AddressingMode};
+use redcode::{Value, AddressingMode};
 
 /// Field containing addressing mode and offset
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Field
 {
-    pub offset: Offset,
+    pub value:  Value,
     pub mode:   AddressingMode
 }
 
@@ -16,7 +16,7 @@ impl fmt::Display for Field
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
-        write!(f, "{}{}", self.mode, self.offset)
+        write!(f, "{}{}", self.mode, self.value)
     }
 }
 
@@ -25,7 +25,7 @@ impl Default for Field
     fn default() -> Self
     {
         Field {
-            offset: 0,
+            value: 0,
             mode:   AddressingMode::Direct
         }
     }

@@ -6,8 +6,8 @@ pub type Program = Vec<Instruction>;
 /// Address in a core
 pub type Address = u32;
 
-/// Offset to an `Address`
-pub type Offset = i16;
+/// `Field` Value 
+pub type Value = i16;
 
 /// Process ID
 pub type Pid = u16;
