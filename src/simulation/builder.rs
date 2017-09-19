@@ -113,18 +113,6 @@ impl MarsBuilder
 
     /// Size of memory
     ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::MarsBuilder;
-    ///
-    /// let core = MarsBuilder::new()
-    ///     .size(80)
-    ///     .build_and_load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(core.size(), 80);
-    /// ```
-    ///
     /// # Arguments
     /// * `size`: size of memory
     ///
@@ -137,9 +125,6 @@ impl MarsBuilder
     }
 
     /// Size of each warrior's P-space
-    ///
-    /// # Examples
-    /// TODO
     ///
     /// # Arguments
     /// * `size`: size of memory
@@ -154,19 +139,6 @@ impl MarsBuilder
 
     /// Maximum number of cycles that can elapse before a tie is declared
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// use libcw::simulation::MarsBuilder;
-    ///
-    /// let core = MarsBuilder::new()
-    ///     .max_cycles(100)
-    ///     .build_and_load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(100, core.max_cycles());
-    /// ```
-    ///
     /// # Arguments
     /// * `n`: number of cycles
     ///
@@ -180,17 +152,6 @@ impl MarsBuilder
 
     /// Maximum number of processes a core can have in it's process queue
     ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::MarsBuilder;
-    /// let core = MarsBuilder::new()
-    ///     .max_processes(10)
-    ///     .build_and_load(vec![])
-    ///     .unwrap();
-    ///
-    /// assert_eq!(10, core.max_processes());
-    /// ```
-    ///
     /// # Arguments
     /// * `n`: number of processes
     ///
@@ -203,17 +164,6 @@ impl MarsBuilder
     }
 
     /// Maximum number of instructions allowed in a program
-    ///
-    /// # Examples
-    /// ```
-    /// use libcw::simulation::MarsBuilder;
-    ///
-    /// let core = MarsBuilder::new()
-    ///     .max_length(100)
-    ///     .build();
-    ///
-    /// assert_eq!(100, core.max_length());
-    /// ```
     ///
     /// # Arguments
     /// * `n`: number of instructions
@@ -252,3 +202,87 @@ impl MarsBuilder
         self
     }
 }
+
+#[cfg(test)]
+mod test_builder
+{
+    use super::*;
+
+    #[test]
+    fn test_build_mars_is_halted()
+    {
+        let mars = MarsBuilder::new().build();
+        assert_eq!(true, mars.halted());
+    }
+
+    #[test]
+    fn test_version_set()
+    {
+        let mars = MarsBuilder::new()
+            .version(890)
+            .build();
+
+        assert_eq!(890, mars.version());
+    }
+
+    #[test]
+    fn test_size_set()
+    {
+        let mars = MarsBuilder::new()
+            .size(890)
+            .build();
+
+        assert_eq!(890, mars.size());
+    }
+
+    #[test]
+    fn test_pspace_size_set()
+    {
+        let mars = MarsBuilder::new()
+            .pspace_size(890)
+            .build();
+
+        assert_eq!(890, mars.pspace_size());
+    }
+
+    #[test]
+    fn test_max_cycles_set()
+    {
+        let mars = MarsBuilder::new()
+            .max_cycles(890)
+            .build();
+
+        assert_eq!(890, mars.max_cycles());
+    }
+
+    #[test]
+    fn test_max_processes_set()
+    {
+        let mars = MarsBuilder::new()
+            .max_processes(890)
+            .build();
+
+        assert_eq!(890, mars.max_processes());
+    }
+
+    #[test]
+    fn test_max_length_set()
+    {
+        let mars = MarsBuilder::new()
+            .max_length(890)
+            .build();
+
+        assert_eq!(890, mars.max_length());
+    }
+    
+    #[test]
+    fn test_min_distance_set()
+    {
+        let mars = MarsBuilder::new()
+            .min_distance(890)
+            .build();
+
+        assert_eq!(890, mars.min_distance());
+    }
+}
+
