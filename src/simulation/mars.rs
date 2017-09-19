@@ -248,13 +248,20 @@ impl Mars
     pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: &Program)
         -> LoadResult<()>
     {
+        let dest = dest % self.size() as Address;
         let valid_length = prog.len() <= self.max_length();
+
         if valid_length {
             // load program into memory
-            let size = self.size();
             let pin = pin.unwrap_or(self.process_count() as Pid);
-            for i in 0..prog.len() {
-                self.memory[(i + dest as usize) % size] = prog[i];
+            let iter = (0..self.size())
+                .cycle()
+                .skip(dest as usize)
+                .take(prog.len())
+                .enumerate();
+
+            for (i, j) in iter {
+                self.memory[j] = prog[i];
             }
 
             // Create pspace
@@ -1160,6 +1167,28 @@ mod test_mars
         ]);
         
         assert_eq!(Err(LoadError::InvalidDistance), result);
+    }
+
+    #[test]
+    fn test_load_succeeds_on_boundary()
+    {
+        let mut mars = MarsBuilder::new()
+            .size(16)
+            .build();
+        
+        let mut program = vec![Instruction::default(); 4];
+        for (i, e) in program.iter_mut().enumerate() {
+            e.op.code = OpCode::Mov;
+            e.a.value = i as Value;
+        }
+
+        let result = mars.load(14, None, &program);
+
+        assert_eq!(Ok(()), result);
+        assert_eq!(program[0], mars.memory()[14]);
+        assert_eq!(program[1], mars.memory()[15]);
+        assert_eq!(program[2], mars.memory()[0]);
+        assert_eq!(program[3], mars.memory()[1]);
     }
 
     #[test]
