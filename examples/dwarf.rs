@@ -41,11 +41,11 @@ fn main()
                 mode: OpMode::AB
             },
             a: Field {
-                offset: 4,
+                value: 4,
                 mode: AddressingMode::Immediate
             },
             b: Field {
-                offset: 3,
+                value: 3,
                 mode: AddressingMode::Direct
             }
         },
@@ -55,11 +55,11 @@ fn main()
                 mode: OpMode::I
             },
             a: Field {
-                offset: 2,
+                value: 2,
                 mode: AddressingMode::Direct
             },
             b: Field {
-                offset: 2,
+                value: 2,
                 mode: AddressingMode::BIndirect
             }
         },
@@ -69,11 +69,11 @@ fn main()
                 mode: OpMode::I
             },
             a: Field {
-                offset: -2,
+                value: -2,
                 mode: AddressingMode::Direct
             },
             b: Field {
-                offset: 0,
+                value: 0,
                 mode: AddressingMode::Direct
             }
         },
@@ -83,11 +83,11 @@ fn main()
                 mode: OpMode::I
             },
             a: Field {
-                offset: 0,
+                value: 0,
                 mode: AddressingMode::Immediate
             },
             b: Field {
-                offset: 0,
+                value: 0,
                 mode: AddressingMode::Immediate
             }
         },

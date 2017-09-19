@@ -41,11 +41,11 @@ fn main()
                 mode: OpMode::I
             },
             a: Field {
-                offset: 0,
+                value: 0,
                 mode: AddressingMode::Direct
             },
             b: Field {
-                offset: 1,
+                value: 1,
                 mode: AddressingMode::Direct
             }
         }

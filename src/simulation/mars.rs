@@ -287,7 +287,7 @@ impl Mars
             return Err(LoadError::EmptyLoad);
         }
 
-        let valid_margin = true; // TODO: actually validate distance
+        let valid_margin = true; // TODO
 
         if valid_margin {
             for &(dest, maybe_pin, ref prog) in programs.iter() {
@@ -1141,6 +1141,17 @@ mod test_mars
     #[ignore]
     fn test_load_batch_load_fails_invalid_margin()
     {
+        let mut mars = MarsBuilder::new().min_distance(10).build();
+
+        let useless_program = vec![Instruction::default(); 1];
+
+        // intentionally load the programs with invalid spacings
+        let result = mars.load_batch(vec![
+            (0, None, &useless_program),
+            (1, None, &useless_program),
+        ]);
+        
+        assert_eq!(Err(LoadError::InvalidDistance), result);
     }
 
     #[test]
@@ -1180,11 +1191,11 @@ mod test_mars
                     mode: OpMode::I
                 },
                 a: Field {
-                    offset: 0,
+                    value: 0,
                     mode: AddressingMode::Direct,
                 },
                 b: Field {
-                    offset: 1,
+                    value: 1,
                     mode: AddressingMode::Direct,
                 }
             },
