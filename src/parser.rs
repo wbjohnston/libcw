@@ -1,6 +1,10 @@
 //! Tools for parsing strings into usable redcode instructions
 
+use regex::Regex;
+
 use redcode::Program;
+
+use std::collections::HashMap;
 
 /// Result of a parse
 #[allow(dead_code, unused_variables)]
@@ -8,11 +12,20 @@ pub type ParseResult<T> = Result<T, ParseError>;
 
 /// Holds state for lexing
 #[allow(dead_code, unused_variables)]
-struct Lexer; // TODO
+struct Lexer<'a>
+{
+    input:  &'a str,
+    output: &'a mut Vec<Token<'a>>
+}
 
 /// Holds state for parsing
 #[allow(dead_code, unused_variables)]
-struct Parser; // TODO: implement parser structure
+struct Parser<'a>
+{
+    sym_table: HashMap<String, String>,
+    input:     &'a Vec<Token<'a>>,
+    output:    &'a mut Program
+}
 
 /// Structure containing all data about an error occuring during parsing
 #[allow(dead_code, unused_variables)]
@@ -24,11 +37,39 @@ enum ParseErrorKind {} // TODO
 
 /// Unit of information from an input program
 #[allow(dead_code, unused_variables)]
-struct Token; // TODO
+struct Token<'a>
+{
+    content: &'a str,
+    start:   usize,
+    end:     usize,
+    kind:    TokenKind,
+}
 
 /// Type of token
 #[allow(dead_code, unused_variables)]
-enum TokenKind {} // TODO
+enum TokenKind
+{
+    /// Jump label
+    Label,
+
+    /// "MOV", "DAT" ...
+    OpCode,
+
+    /// "A", "B", ...
+    OpMode,
+    
+    /// "$", "#" ...
+    AddressingMode,
+    
+    /// "+", "-" ...
+    Symbol,
+
+    /// Number Literaly
+    Number,
+    
+    /// String literal
+    Identifier,
+}
 
 /// Parse a string into `Instruction`s placing them in a buffer
 ///
@@ -42,6 +83,9 @@ enum TokenKind {} // TODO
 pub fn parse_into(program_str: &str, buf: &mut Program)
     -> ParseResult<()>
 {
+    let tokens = lex(program_str);
+    // TODO: symbol resolution (labels, EQU, ...)
+    // TODO: expression resolution
     unimplemented!();
 }
 
@@ -68,10 +112,19 @@ pub fn parse(program_str: &str)
 /// # Return
 /// vector containing all tokens on success `ParseError` otherwise
 #[allow(dead_code, unused_variables)]
-fn lex(program_str: &str)
-    -> ParseResult<Vec<Token>>
+fn lex<'a>(program_str: &'a str)
+    -> ParseResult<Vec<Token<'a>>>
+{
+    let mut buf = vec![];
+    lex_into(program_str, &mut buf)?;
+    Ok(buf)
+}
+
+fn lex_into<'a>(program_str: &'a str, buf: &'a mut Vec<Token>)
+    -> ParseResult<()>
 {
     unimplemented!();
+    Ok(())
 }
 
 /// Parse tokens into a vector of `Instructions`
@@ -86,9 +139,7 @@ fn parse_tokens(program_str: Vec<Token>)
     -> ParseResult<Program>
 {
     let mut v = vec![];
-
     parse_tokens_into(program_str, &mut v)?;
-
     Ok(v)
 }
 
