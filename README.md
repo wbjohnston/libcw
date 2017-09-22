@@ -1,10 +1,15 @@
 # Core Wars Library
 Supporting functions and runtime for the game corewars
 
+Please read the [API documentation on docs.rs](https://docs.rs/libcw)
+
 ![Travis Status](https://travis-ci.org/wbjohnston/libcw.svg?branch=master)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docs.rs link](https://docs.rs/libcw/badge.svg)](https://docs.rs/libcw)
 
 ## RedCode
 Core Wars programs are written in a custom assembly-like language named redcode.
+
 
 #### Redcode Opcodes
 |Opcode                  |Description                                          |
