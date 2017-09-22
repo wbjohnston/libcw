@@ -213,18 +213,19 @@ impl MarsBuilder
 mod test_builder
 {
     use super::*;
+    use redcode::Instruction;
 
     #[test]
     fn test_build_mars_is_halted()
     {
-        let mars = MarsBuilder::new().build();
+        let mars: Mars<Instruction> = MarsBuilder::new().build();
         assert_eq!(true, mars.halted());
     }
 
     #[test]
     fn test_version_set()
     {
-        let mars = MarsBuilder::new()
+        let mars: Mars<Instruction> = MarsBuilder::new()
             .version(890)
             .build();
 
@@ -234,7 +235,7 @@ mod test_builder
     #[test]
     fn test_size_set()
     {
-        let mars = MarsBuilder::new()
+        let mars: Mars<Instruction> = MarsBuilder::new()
             .size(890)
             .build();
 
@@ -244,7 +245,7 @@ mod test_builder
     #[test]
     fn test_pspace_size_set()
     {
-        let mars = MarsBuilder::new()
+        let mars: Mars<Instruction> = MarsBuilder::new()
             .pspace_size(890)
             .build();
 
@@ -254,7 +255,7 @@ mod test_builder
     #[test]
     fn test_max_cycles_set()
     {
-        let mars = MarsBuilder::new()
+        let mars: Mars<Instruction> = MarsBuilder::new()
             .max_cycles(890)
             .build();
 
@@ -264,7 +265,7 @@ mod test_builder
     #[test]
     fn test_max_processes_set()
     {
-        let mars = MarsBuilder::new()
+        let mars: Mars<Instruction> = MarsBuilder::new()
             .max_processes(890)
             .build();
 
@@ -274,7 +275,7 @@ mod test_builder
     #[test]
     fn test_max_length_set()
     {
-        let mars = MarsBuilder::new()
+        let mars: Mars<Instruction> = MarsBuilder::new()
             .max_length(890)
             .build();
 
@@ -284,7 +285,7 @@ mod test_builder
     #[test]
     fn test_min_distance_set()
     {
-        let mars = MarsBuilder::new()
+        let mars: Mars<Instruction> = MarsBuilder::new()
             .min_distance(890)
             .build();
 

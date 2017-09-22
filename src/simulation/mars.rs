@@ -2,7 +2,7 @@
 use std::collections::{VecDeque, HashMap};
 
 use redcode::types::*;
-use redcode::traits::Instruction;
+use redcode::traits;
 
 pub type SimulationResult<T> = Result<T, SimulationError>;
 pub type LoadResult<T> = Result<T, LoadError>;
@@ -58,7 +58,7 @@ pub enum SimulationEvent
 /// Core wars runtime
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Mars<T>
-    where T: Instruction
+    where T: traits::Instruction
 {
     /// Mars memory
     pub(super) memory:        Vec<T>,
@@ -105,7 +105,7 @@ pub struct Mars<T>
 }
 
 impl<T> Mars<T>
-where T: Instruction
+where T: traits::Instruction
 {
     // TODO: add generic program type
 
@@ -1114,12 +1114,13 @@ where T: Instruction
 mod test_mars
 {
     use simulation::MarsBuilder;
+    use redcode::Instruction;
     use super::*;
 
     #[test]
     fn test_load_batch_fails_empty_vector()
     {
-        let mut mars = MarsBuilder::new().build();
+        let mut mars: Mars<Instruction> = MarsBuilder::new().build();
         assert_eq!(
             Err(LoadError::EmptyLoad),
             mars.load_batch(vec![])
@@ -1127,33 +1128,10 @@ mod test_mars
     }
 
     #[test]
-    fn test_load_suceeds()
-    {
-        let mut mars = MarsBuilder::new().build();
-        let max_length = mars.max_length();
-        let prog = vec![Default::default(); max_length - 1];
-
-        assert_eq!(Ok(()), mars.load(0, None, &prog));
-    }
-
-    #[test]
-    fn test_load_fails_program_too_long()
-    {
-        let mut mars = MarsBuilder::new().build();
-        let max_length = mars.max_length();
-        let prog = vec![Default::default(); max_length + 1];
-
-        assert_eq!(
-            Err(LoadError::InvalidLength),
-            mars.load(0, None, &prog)
-            );
-    }
-
-    #[test]
     #[ignore]
     fn test_load_batch_load_fails_invalid_distance()
     {
-        let mut mars = MarsBuilder::new()
+        let mut mars: Mars<Instruction> = MarsBuilder::new()
             .min_distance(10)
             .build();
 
@@ -1169,32 +1147,9 @@ mod test_mars
     }
 
     #[test]
-    fn test_load_succeeds_on_boundary()
-    {
-        let mut mars = MarsBuilder::new()
-            .size(16)
-            .build();
-        
-        // transform the instruction so we can recognize it in memory
-        let mut program = vec![Default::default(); 4];
-        for (i, e) in program.iter_mut().enumerate() {
-            e.op.code = OpCode::Mov;
-            e.a() = i as Value;
-        }
-
-        let result = mars.load(14, None, &program);
-
-        assert_eq!(Ok(()), result);
-        assert_eq!(program[0], mars.memory()[14]);
-        assert_eq!(program[1], mars.memory()[15]);
-        assert_eq!(program[2], mars.memory()[0]);
-        assert_eq!(program[3], mars.memory()[1]);
-    }
-
-    #[test]
     fn test_batch_load_succeeds()
     {
-        let mut mars = MarsBuilder::new()
+        let mut mars: Mars<Instruction> = MarsBuilder::new()
             .min_distance(10)
             .max_length(10)
             .build();
@@ -1213,7 +1168,7 @@ mod test_mars
     #[test]
     fn test_step_errors_when_halted()
     {
-        let mut mars = MarsBuilder::new().build();
+        let mut mars: Mars<Instruction> = MarsBuilder::new().build();
         let result = mars.step();
 
         assert_eq!(Err(SimulationError::Halted), result);
@@ -1222,7 +1177,7 @@ mod test_mars
     #[test]
     fn test_dat()
     {
-        let mut mars = MarsBuilder::new().build_and_load(vec![
+        let mut mars: Mars<Instruction> = MarsBuilder::new().build_and_load(vec![
             (0, None, &vec![Default::default(); 1])
             ])
             .unwrap();
@@ -1236,23 +1191,17 @@ mod test_mars
     fn test_mov()
     {
         let prog = vec![
-            Instruction {
-                op: OpField {
-                    code: OpCode::Mov,
-                    mode: Modifier::I
-                },
-                a: Field {
-                    value: 0,
-                    mode: AddressingMode::Direct,
-                },
-                b: Field {
-                    value: 1,
-                    mode: AddressingMode::Direct,
-                }
-            },
-        ];
+            Instruction::new(
+                OpCode::Mov,
+                Modifier::I,
+                0,
+                AddressingMode::Direct,
+                1,
+                AddressingMode::Direct
+                )
+        ]; 
 
-        let mut mars = MarsBuilder::new().build_and_load(vec![
+        let mut mars: Mars<Instruction> = MarsBuilder::new().build_and_load(vec![
             (0, None, &prog)
             ])
             .unwrap();
@@ -1271,51 +1220,33 @@ mod test_mars
     {
         // splitter program, infinitely creates imps
         let prog = vec![
-            Instruction {
-                op: OpField {
-                    code: OpCode::Spl,
-                    mode: Modifier::I
-                },
-                a: Field {
-                    value: 2,
-                    mode: AddressingMode::Direct
-                },
-                b: Field {
-                    value: 1,
-                    mode: AddressingMode::Direct
-                }
-            },
-            Instruction {
-                op: OpField {
-                    code: OpCode::Jmp,
-                    mode: Modifier::I
-                },
-                a: Field {
-                    value: -1,
-                    mode: AddressingMode::Direct
-                },
-                b: Field {
-                    value: 1,
-                    mode: AddressingMode::Direct
-                }
-            },
-            Instruction {
-                op: OpField {
-                    code: OpCode::Mov,
-                    mode: Modifier::I
-                },
-                a: Field {
-                    value: 0,
-                    mode: AddressingMode::Direct
-                },
-                b: Field {
-                    value: 1,
-                    mode: AddressingMode::Direct
-                }
-            },
+            Instruction::new(
+                OpCode::Spl,
+                Modifier::I,
+                2,
+                AddressingMode::Direct,
+                1,
+                AddressingMode::Direct,
+                ),
+            Instruction::new(
+                OpCode::Jmp,
+                Modifier::I,
+                -1,
+                AddressingMode::Direct,
+                1,
+                AddressingMode::Direct,
+                ),
+            Instruction::new(
+                OpCode::Mov,
+                Modifier::I,
+                0,
+                AddressingMode::Direct,
+                1,
+                AddressingMode::Direct,
+            ),
         ];
 
-        let mut mars = MarsBuilder::new()
+        let mut mars: Mars<Instruction> = MarsBuilder::new()
             .max_processes(10)
             .build_and_load(vec![(0, None, &prog)])
             .unwrap();
