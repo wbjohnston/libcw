@@ -27,6 +27,8 @@ pub use self::op_field::OpField;
 mod field;
 pub use self::field::Field;
 
+pub mod traits;
+
 mod addressing_mode;
 pub use self::addressing_mode::AddressingMode;
 
