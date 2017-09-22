@@ -542,7 +542,6 @@ where T: traits::Instruction
     fn skip_pc(&mut self) -> SimulationEvent
     {
         let pc = self.pc();
-        // TODO: Holy shit this is uuugggglllllyyyy
         self.pc = (pc + 2) % self.size() as Address;
         SimulationEvent::Skipped
     }
@@ -1369,6 +1368,58 @@ mod test_mars
         assert_eq!(prog[1].b(),                  mars.memory()[2].a());
         assert_eq!(init_pc + 1,                  mars.pc());
         assert_eq!(init_cycle + 1,               mars.cycle());
+    }
+
+    #[test]
+    fn test_seq_i_mode()
+    {
+        let prog = vec![
+            InstructionStruct::new(
+                OpCode::Seq,
+                Modifier::I,
+                0,
+                AddressingMode::Direct,
+                1,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Seq,
+                Modifier::I,
+                0,
+                AddressingMode::Direct,
+                1,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Seq,
+                Modifier::I,
+                0,
+                AddressingMode::Direct,
+                1,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Seq,
+                Modifier::I,
+                0,
+                AddressingMode::Direct,
+                0,
+                AddressingMode::Direct
+                ),
+        ];
+
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .max_processes(10)
+            .build_and_load(vec![(0, None, &prog)])
+            .unwrap();
+
+        let init_pc = mars.pc();
+
+        assert_eq!(Ok(SimulationEvent::Skipped), mars.step());
+        assert_eq!(init_pc + 2, mars.pc());
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(init_pc + 3, mars.pc());
     }
 
     #[test]
