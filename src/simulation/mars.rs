@@ -66,8 +66,10 @@ pub struct Mars<T>
     /// Instruction register
     pub(super) ir:            T,
 
+    /// Current Pid executing on the Mars
     pub(super) pid:           Pid,
 
+    /// Current program counter
     pub(super) pc:            Address,
 
     /// Current numbered cycle core is executing
@@ -107,8 +109,6 @@ pub struct Mars<T>
 impl<T> Mars<T>
 where T: traits::Instruction
 {
-    // TODO: add generic program type
-
     /// Step forward one cycle
     pub fn step(&mut self) -> SimulationResult<SimulationEvent>
     {
@@ -210,7 +210,6 @@ where T: traits::Instruction
         } else {
             // Fetch new queue
             let &mut(curr_pid, ref mut curr_q) = self.process_queue.front_mut().unwrap();
-            println!("{:?}", curr_q);
             self.pid = curr_pid;
             self.pc = curr_q.pop_front().unwrap();
             self.cycle += 1;
@@ -395,9 +394,9 @@ where T: traits::Instruction
     }
 
     /// Get immutable reference to memory
-    pub fn memory(&self) -> &[T]
+    pub fn memory(&self) -> &Vec<T>
     {
-        self.memory.as_slice()
+        &self.memory
     }
 
     /// Get an immutable reference to private storage
@@ -618,14 +617,13 @@ where T: traits::Instruction
     /// * `addr`: address in the pspace to store
     /// * `instr`: instruction to store
     fn store_pspace(&mut self, pin: Pin, addr: Address, value: Value)
-        -> Result<(), ()>
     {
         if let Some(pspace) = self.pspace.get_mut(&pin) {
             let pspace_size = pspace.len();
             pspace[addr as usize % pspace_size] = value;
-            Ok(())
-        } else {
-            Err(())
+        }  else {
+            // TODO: create pspace for pin
+            unimplemented!();
         }
     }
 
@@ -665,12 +663,13 @@ where T: traits::Instruction
     /// # Arguments
     /// * `pin`: pin of program, used as lookup key
     /// * `addr`: address of pspace to access
-    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Result<Value, ()>
+    fn fetch_pspace(&self, pin: Pin, addr: Address) -> Value
     {
         if let Some(pspace) = self.pspace.get(&pin) {
-            Ok(pspace[addr as usize % pspace.len()])
+            pspace[addr as usize % pspace.len()]
         } else {
-            Err(())
+            // TODO: create new pspace
+            unimplemented!();
         }
     }
 
@@ -1092,7 +1091,9 @@ where T: traits::Instruction
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_ldp(&mut self) -> SimulationEvent
     {
-        unimplemented!();
+        match self.ir.modifier() {
+            _ => unimplemented!()
+        }
     }
 
     /// Execute `stp` instruction
@@ -1100,7 +1101,9 @@ where T: traits::Instruction
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_stp(&mut self) -> SimulationEvent
     {
-        unimplemented!();
+        match self.ir.modifier() {
+            _ => unimplemented!()
+        }
     }
 
     /// Execute 'nop' instruction
@@ -1114,13 +1117,14 @@ where T: traits::Instruction
 mod test_mars
 {
     use simulation::MarsBuilder;
-    use redcode::Instruction;
+    use redcode::traits::Instruction;
+    use redcode::Instruction as InstructionStruct;
     use super::*;
 
     #[test]
     fn test_load_batch_fails_empty_vector()
     {
-        let mut mars: Mars<Instruction> = MarsBuilder::new().build();
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new().build();
         assert_eq!(
             Err(LoadError::EmptyLoad),
             mars.load_batch(vec![])
@@ -1131,7 +1135,7 @@ mod test_mars
     #[ignore]
     fn test_load_batch_load_fails_invalid_distance()
     {
-        let mut mars: Mars<Instruction> = MarsBuilder::new()
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
             .min_distance(10)
             .build();
 
@@ -1149,7 +1153,7 @@ mod test_mars
     #[test]
     fn test_batch_load_succeeds()
     {
-        let mut mars: Mars<Instruction> = MarsBuilder::new()
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
             .min_distance(10)
             .max_length(10)
             .build();
@@ -1168,7 +1172,7 @@ mod test_mars
     #[test]
     fn test_step_errors_when_halted()
     {
-        let mut mars: Mars<Instruction> = MarsBuilder::new().build();
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new().build();
         let result = mars.step();
 
         assert_eq!(Err(SimulationError::Halted), result);
@@ -1177,7 +1181,7 @@ mod test_mars
     #[test]
     fn test_dat()
     {
-        let mut mars: Mars<Instruction> = MarsBuilder::new().build_and_load(vec![
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new().build_and_load(vec![
             (0, None, &vec![Default::default(); 1])
             ])
             .unwrap();
@@ -1188,21 +1192,38 @@ mod test_mars
     }
 
     #[test]
-    fn test_mov()
+    fn test_mov_i_mode()
     {
         let prog = vec![
-            Instruction::new(
+            InstructionStruct::new(
                 OpCode::Mov,
                 Modifier::I,
-                0,
-                AddressingMode::Direct,
                 1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Dat,
+                Modifier::I,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::I,
+                3,
+                AddressingMode::Direct,
+                4,
                 AddressingMode::Direct
                 )
         ]; 
 
-        let mut mars: Mars<Instruction> = MarsBuilder::new().build_and_load(vec![
-            (0, None, &prog)
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .build_and_load(vec![
+                (0, None, &prog)
             ])
             .unwrap();
 
@@ -1210,17 +1231,152 @@ mod test_mars
         let init_cycle = mars.cycle();
 
         assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(prog[1],                      mars.memory()[2]);
         assert_eq!(init_pc + 1,                  mars.pc());
         assert_eq!(init_cycle + 1,               mars.cycle());
     }
 
     #[test]
-    // #[ignore]
+    fn test_mov_a_mode()
+    {
+        let prog: Vec<InstructionStruct> = vec![
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::A,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Dat,
+                Modifier::I,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::I,
+                3,
+                AddressingMode::Direct,
+                4,
+                AddressingMode::Direct
+                )
+        ]; 
+
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .build_and_load(vec![
+                (0, None, &prog)
+            ])
+            .unwrap();
+
+        let init_pc    = mars.pc();
+        let init_cycle = mars.cycle();
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(prog[1].a(),                  mars.memory()[2].a());
+        assert_eq!(init_pc + 1,                  mars.pc());
+        assert_eq!(init_cycle + 1,               mars.cycle());
+    }
+
+    #[test]
+    fn test_mov_b_mode()
+    {
+        let prog: Vec<InstructionStruct> = vec![
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::B,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Dat,
+                Modifier::I,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::I,
+                3,
+                AddressingMode::Direct,
+                4,
+                AddressingMode::Direct
+                )
+        ]; 
+
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .build_and_load(vec![
+                (0, None, &prog)
+            ])
+            .unwrap();
+
+        let init_pc    = mars.pc();
+        let init_cycle = mars.cycle();
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(prog[1].b(),                  mars.memory()[2].b());
+        assert_eq!(init_pc + 1,                  mars.pc());
+        assert_eq!(init_cycle + 1,               mars.cycle());
+    }
+
+    #[test]
+    fn test_mov_ab_mode()
+    {
+        let prog: Vec<InstructionStruct> = vec![
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::AB,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Dat,
+                Modifier::I,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::I,
+                3,
+                AddressingMode::Direct,
+                4,
+                AddressingMode::Direct
+                )
+        ]; 
+
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .build_and_load(vec![
+                (0, None, &prog)
+            ])
+            .unwrap();
+
+        let init_pc    = mars.pc();
+        let init_cycle = mars.cycle();
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(prog[1].b(),                  mars.memory()[2].a());
+        assert_eq!(init_pc + 1,                  mars.pc());
+        assert_eq!(init_cycle + 1,               mars.cycle());
+    }
+
+    #[test]
     fn test_spl_cant_create_more_than_max_processes()
     {
         // splitter program, infinitely creates imps
         let prog = vec![
-            Instruction::new(
+            InstructionStruct::new(
                 OpCode::Spl,
                 Modifier::I,
                 2,
@@ -1228,7 +1384,7 @@ mod test_mars
                 1,
                 AddressingMode::Direct,
                 ),
-            Instruction::new(
+            InstructionStruct::new(
                 OpCode::Jmp,
                 Modifier::I,
                 -1,
@@ -1236,7 +1392,7 @@ mod test_mars
                 1,
                 AddressingMode::Direct,
                 ),
-            Instruction::new(
+            InstructionStruct::new(
                 OpCode::Mov,
                 Modifier::I,
                 0,
@@ -1246,7 +1402,7 @@ mod test_mars
             ),
         ];
 
-        let mut mars: Mars<Instruction> = MarsBuilder::new()
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
             .max_processes(10)
             .build_and_load(vec![(0, None, &prog)])
             .unwrap();

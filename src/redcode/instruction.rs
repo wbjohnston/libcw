@@ -1,8 +1,8 @@
 
 use std::fmt;
 
-use redcode::types::{Modifier, Value, OpCode, AddressingMode};
-use redcode::traits;
+use super::types::{Modifier, Value, OpCode, AddressingMode};
+use super::traits;
 
 /// Redcode instruction
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -21,12 +21,12 @@ impl Instruction
     /// Create a new instruction
     #[inline]
     pub fn new(
-        op: OpCode,
+        op:       OpCode,
         modifier: Modifier,
-        a: Value,
-        a_mode: AddressingMode,
-        b: Value,
-        b_mode: AddressingMode,
+        a:        Value,
+        a_mode:   AddressingMode,
+        b:        Value,
+        b_mode:   AddressingMode,
         ) -> Self
     {
         Self {op, modifier, a, a_mode, b, b_mode}

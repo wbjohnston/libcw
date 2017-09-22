@@ -215,6 +215,8 @@ mod test_builder
     use super::*;
     use redcode::Instruction;
 
+    /// Verify that the `MarsBuilder` creates a halted `Mars` if no programs
+    /// were loaded
     #[test]
     fn test_build_mars_is_halted()
     {
@@ -222,6 +224,7 @@ mod test_builder
         assert_eq!(true, mars.halted());
     }
 
+    /// Verify that the `MarsBuilder` correctly sets the version in the `Mars`
     #[test]
     fn test_version_set()
     {
@@ -232,6 +235,7 @@ mod test_builder
         assert_eq!(890, mars.version());
     }
 
+    /// Verify that the `MarsBuilder` correctly sets the size in the `Mars`
     #[test]
     fn test_size_set()
     {
@@ -242,6 +246,8 @@ mod test_builder
         assert_eq!(890, mars.size());
     }
 
+    /// Verify that the `MarsBuilder` correctly sets the p-space size in the 
+    /// `Mars`
     #[test]
     fn test_pspace_size_set()
     {
@@ -252,6 +258,8 @@ mod test_builder
         assert_eq!(890, mars.pspace_size());
     }
 
+    /// Verify that the `MarsBuilder` correctly sets the max cycles in the 
+    /// `Mars`
     #[test]
     fn test_max_cycles_set()
     {
@@ -262,6 +270,8 @@ mod test_builder
         assert_eq!(890, mars.max_cycles());
     }
 
+    /// Verify that the `MarsBuilder` correctly sets the max processes in the 
+    /// `Mars`
     #[test]
     fn test_max_processes_set()
     {
@@ -272,6 +282,8 @@ mod test_builder
         assert_eq!(890, mars.max_processes());
     }
 
+    /// Verify that the `MarsBuilder` correctly sets the max length in the 
+    /// `Mars`
     #[test]
     fn test_max_length_set()
     {
@@ -282,6 +294,8 @@ mod test_builder
         assert_eq!(890, mars.max_length());
     }
     
+    /// Verify that the `MarsBuilder` correctly sets the minimum distance in the
+    /// `Mars`
     #[test]
     fn test_min_distance_set()
     {

@@ -43,8 +43,3 @@ pub trait Instruction: Default + Clone
     fn set_b_mode(&mut self, v: AddressingMode);
 }
 
-// impl Instruction for u32 
-// {
-
-// }
-
