@@ -1,8 +1,6 @@
 //! Tools for parsing strings into usable redcode instructions
 
-use regex::Regex;
-
-use redcode::Program;
+use super::redcode::traits::Instruction;
 
 use std::collections::HashMap;
 
@@ -20,11 +18,12 @@ struct Lexer<'a>
 
 /// Holds state for parsing
 #[allow(dead_code, unused_variables)]
-struct Parser<'a>
+struct Parser<'a, T: 'a>
+where T: Instruction
 {
     sym_table: HashMap<String, String>,
     input:     &'a Vec<Token<'a>>,
-    output:    &'a mut Program
+    output:    &'a mut Vec<T>
 }
 
 /// Structure containing all data about an error occuring during parsing
@@ -80,8 +79,9 @@ enum TokenKind
 /// # Return
 /// Vector contained `Instruction`s `program_str` was parsed into
 #[allow(dead_code, unused_variables)]
-pub fn parse_into(program_str: &str, buf: &mut Program)
+pub fn parse_into<T>(program_str: &str, buf: &mut Vec<T>)
     -> ParseResult<()>
+    where T: Instruction
 {
     let tokens = lex(program_str);
     // TODO: symbol resolution (labels, EQU, ...)
@@ -96,8 +96,9 @@ pub fn parse_into(program_str: &str, buf: &mut Program)
 /// # Return
 /// Vector contained `Instruction`s `program_str` was parsed into
 #[allow(dead_code, unused_variables)]
-pub fn parse(program_str: &str)
-    -> ParseResult<Program>
+pub fn parse<T>(program_str: &str)
+    -> ParseResult<Vec<T>>
+    where T: Instruction
 {
     let mut v = vec![];
     parse_into(program_str, &mut v)?;
@@ -135,8 +136,9 @@ fn lex_into<'a>(program_str: &'a str, buf: &'a mut Vec<Token>)
 /// # Return
 /// parsed program on success `ParseError` otherwise
 #[allow(dead_code, unused_variables)]
-fn parse_tokens(program_str: Vec<Token>)
-    -> ParseResult<Program>
+fn parse_tokens<T>(program_str: Vec<Token>)
+    -> ParseResult<Vec<T>>
+    where T: Instruction
 {
     let mut v = vec![];
     parse_tokens_into(program_str, &mut v)?;
@@ -151,8 +153,9 @@ fn parse_tokens(program_str: Vec<Token>)
 /// # Return
 /// `Ok(())` on success and `ParseError` otherwise
 #[allow(dead_code, unused_variables)]
-fn parse_tokens_into(program_str: Vec<Token>, buf: &mut Program)
+fn parse_tokens_into<T>(program_str: Vec<Token>, buf: &mut Vec<T>)
     -> ParseResult<()>
+    where T: Instruction
 {
     unimplemented!();
 }

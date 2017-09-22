@@ -1,7 +1,8 @@
 
 use std::collections::{VecDeque, HashMap};
 
-use redcode::*;
+use redcode::types::*;
+use redcode::traits::Instruction;
 
 pub type SimulationResult<T> = Result<T, SimulationError>;
 pub type LoadResult<T> = Result<T, LoadError>;
@@ -56,13 +57,14 @@ pub enum SimulationEvent
 
 /// Core wars runtime
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Mars
+pub struct Mars<T>
+    where T: Instruction
 {
     /// Mars memory
-    pub(super) memory:        Vec<Instruction>,
+    pub(super) memory:        Vec<T>,
 
     /// Instruction register
-    pub(super) ir:            Instruction,
+    pub(super) ir:            T,
 
     /// Current numbered cycle core is executing
     pub(super) cycle:         usize,
@@ -98,8 +100,11 @@ pub struct Mars
     pub(super) max_cycles:    usize,
 }
 
-impl Mars
+impl<T> Mars<T>
+where T: Instruction
 {
+    // TODO: add generic program type
+
     /// Step forward one cycle
     pub fn step(&mut self) -> SimulationResult<SimulationEvent>
     {
@@ -116,7 +121,7 @@ impl Mars
 
         // Fetch instruction
         self.ir = self.fetch(pc);
-        let (a_mode, b_mode) = (self.ir.a.mode, self.ir.b.mode);
+        let (a_mode, b_mode) = (self.ir.a_mode(), self.ir.b_mode());
 
         // PostIncrement phase
         let predecrement = a_mode == AddressingMode::AIndirectPreDecrement ||
@@ -127,23 +132,27 @@ impl Mars
         // Preincrement phase
         if predecrement {
             // fetch direct target
-            let a_addr = self.calc_addr_offset(pc, self.ir.a.value);
-            let b_addr = self.calc_addr_offset(pc, self.ir.b.value);
+            let a_addr = self.calc_addr_offset(pc, self.ir.a());
+            let b_addr = self.calc_addr_offset(pc, self.ir.b());
             let mut a = self.fetch(a_addr);
             let mut b = self.fetch(b_addr);
 
+            let (a_a, a_b) = (a.a(), a.b());
+            let (b_a, b_b) = (b.a(), b.b());
+
             // FIXME: combine these into a single match statement
             match a_mode {
-                AddressingMode::AIndirectPreDecrement => a.a.value -= 1,
-                AddressingMode::BIndirectPreDecrement => a.b.value -= 1,
-                _ => { /* Do nothing */ }
+                AddressingMode::AIndirectPreDecrement => { a.set_a(a_a + 1); }
+                AddressingMode::BIndirectPreDecrement => { a.set_b(a_b + 1); }
+                _ => {}
             };
 
             match b_mode {
-                AddressingMode::AIndirectPreDecrement => b.a.value -= 1,
-                AddressingMode::BIndirectPreDecrement => b.b.value -= 1,
-                _ => { /* Do nothing */ }
+                AddressingMode::AIndirectPreDecrement => { b.set_a(b_a + 1); }
+                AddressingMode::BIndirectPreDecrement => { b.set_b(b_b + 1); }
+                _ => {}
             };
+
             self.store(a_addr, a);
             self.store(b_addr, b);
         }
@@ -160,22 +169,25 @@ impl Mars
 
         if postincrement {
             // fetch direct target
-            let a_addr = self.calc_addr_offset(pc, self.ir.a.value);
-            let b_addr = self.calc_addr_offset(pc, self.ir.b.value);
+            let a_addr = self.calc_addr_offset(pc, self.ir.a());
+            let b_addr = self.calc_addr_offset(pc, self.ir.b());
             let mut a = self.fetch(a_addr);
             let mut b = self.fetch(b_addr);
 
+            let (a_a, a_b) = (a.a(), a.b());
+            let (b_a, b_b) = (b.a(), b.b());
+
             // FIXME: combine these into a single match statement
             match a_mode {
-                AddressingMode::AIndirectPostIncrement => a.a.value += 1,
-                AddressingMode::BIndirectPostIncrement => a.b.value += 1,
-                _ => { /* Do nothing */ }
+                AddressingMode::AIndirectPreDecrement => { a.set_a(a_a + 1); }
+                AddressingMode::BIndirectPreDecrement => { a.set_b(a_b + 1); }
+                _ => {}
             };
 
             match b_mode {
-                AddressingMode::AIndirectPostIncrement => b.a.value += 1,
-                AddressingMode::BIndirectPostIncrement => b.b.value += 1,
-                _ => { /* Do nothing */ }
+                AddressingMode::AIndirectPreDecrement => { b.set_a(b_a + 1); }
+                AddressingMode::BIndirectPreDecrement => { b.set_b(b_b + 1); }
+                _ => {}
             };
             // store result
             self.store(a_addr, a);
@@ -219,13 +231,13 @@ impl Mars
     {
         // reset memory
         for e in self.memory.iter_mut() {
-            *e = Instruction::default();
+            *e = Default::default();
         }
 
         self.process_queue.clear();
 
         self.cycle         = 0;
-        self.ir            = Instruction::default();
+        self.ir            = Default::default();
         self.halted        = true;
     }
 
@@ -247,7 +259,7 @@ impl Mars
     /// If the program is loaded successfully `Ok(()). Otherwise, the program 
     ///     was too long. This is the only load constraint that is checked in
     ///     a singleton load
-    pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: &Program)
+    pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: &Vec<T>)
         -> LoadResult<()>
     {
         let dest = dest % self.size() as Address;
@@ -263,7 +275,7 @@ impl Mars
                 .enumerate();
 
             for (i, j) in iter {
-                self.memory[j] = prog[i];
+                self.memory[j] = prog[i].clone();
             }
 
             // Create pspace
@@ -289,7 +301,7 @@ impl Mars
     /// # Return
     /// `Ok(())` if the load was successful, otherwise an error with the 
     ///     corresponding `SimulationError`
-    pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, &Program)>)
+    pub fn load_batch(&mut self, programs: Vec<(Address, Option<Pin>, &Vec<T>)>)
         -> LoadResult<()>
     {
         // TODO: validate margin
@@ -405,7 +417,7 @@ impl Mars
     }
 
     /// Get immutable reference to memory
-    pub fn memory(&self) -> &[Instruction]
+    pub fn memory(&self) -> &[T]
     {
         self.memory.as_slice()
     }
@@ -445,7 +457,7 @@ impl Mars
     /// Execute the instrcution in the `Instruction` register
     fn execute(&mut self) -> SimulationEvent
     {
-        match self.ir.op.code {
+        match self.ir.op() {
             OpCode::Dat => self.exec_dat(),
             OpCode::Mov => self.exec_mov(),
             OpCode::Add => self.exec_add(),
@@ -497,9 +509,10 @@ impl Mars
         use self::AddressingMode::*;
 
         // fetch the addressing mode and offset
-        let (mode, offset) = {
-            let field = if use_a_field { self.ir.a } else { self.ir.b };
-            (field.mode, field.value)
+        let (mode, offset) = if use_a_field { 
+            (self.ir.a_mode(), self.ir.a())
+        } else {
+            (self.ir.b_mode(), self.ir.b())
         };
 
         let pc = self.pc();
@@ -512,11 +525,11 @@ impl Mars
             AIndirect
                 | AIndirectPreDecrement
                 | AIndirectPostIncrement =>
-                self.calc_addr_offset(pc, direct.a.value + offset),
+                self.calc_addr_offset(pc, direct.a() + offset),
             BIndirect
                 | BIndirectPreDecrement
                 | BIndirectPostIncrement =>
-                self.calc_addr_offset(pc, direct.b.value + offset),
+                self.calc_addr_offset(pc, direct.b() + offset),
         }
     }
 
@@ -614,7 +627,7 @@ impl Mars
     /// # Arguments
     /// * `addr`: address to store
     /// * `instr`: instruction to store
-    fn store(&mut self, addr: Address, instr: Instruction)
+    fn store(&mut self, addr: Address, instr: T)
     {
         let mem_size = self.size();
         self.memory[addr as usize % mem_size] = instr;
@@ -643,7 +656,7 @@ impl Mars
     ///
     /// # Arguments
     /// * `instr`: `Instruction` to store
-    fn store_effective_a(&mut self, instr: Instruction)
+    fn store_effective_a(&mut self, instr: T)
     {
         let eff_addr = self.effective_addr_a();
         self.store(eff_addr, instr)
@@ -654,7 +667,7 @@ impl Mars
     ///
     /// # Arguments
     /// * `instr`: `Instruction` to store
-    fn store_effective_b(&mut self, instr: Instruction)
+    fn store_effective_b(&mut self, instr: T)
     {
         let eff_addr = self.effective_addr_b();
         self.store(eff_addr, instr)
@@ -664,9 +677,9 @@ impl Mars
     ///
     /// # Arguments
     /// * `addr`: adress to fetch
-    fn fetch(&self, addr: Address) -> Instruction
+    fn fetch(&self, addr: Address) -> T
     {
-        self.memory[addr as usize % self.size()]
+        self.memory[addr as usize % self.size()].clone()
     }
 
     /// Fetch an instruction from a programs private storage
@@ -685,14 +698,14 @@ impl Mars
 
     /// Fetch copy of instruction pointed at by the A field of the instruction
     /// loaded into the instruction register
-    fn fetch_effective_a(&self) -> Instruction
+    fn fetch_effective_a(&self) -> T
     {
         self.fetch(self.effective_addr_a())
     }
 
     /// Fetch copy of instruction pointed at by the B field of the instruction
     /// loaded into the instruction register
-    fn fetch_effective_b(&self) -> Instruction
+    fn fetch_effective_b(&self) -> T
     {
         self.fetch(self.effective_addr_b())
     }
@@ -703,7 +716,7 @@ impl Mars
 
     /// Execute `dat` instruction
     ///
-    /// Supported OpModes: None
+    /// Supported Modifiers: None
     fn exec_dat(&mut self) -> SimulationEvent
     {
         let _ = self.current_queue_mut().unwrap().pop_front();
@@ -712,28 +725,31 @@ impl Mars
 
     /// Execute `mov` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_mov(&mut self) -> SimulationEvent
     {
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
-        match self.ir.op.mode {
-            OpMode::A => b.a = a.a,
-            OpMode::B => b.b = a.b,
-            OpMode::AB =>b.a = a.b,
-            OpMode::BA =>b.b = a.a,
-            OpMode::F =>
+        let (a_a, a_b) = (a.a(), a.b());
+        let (b_a, b_b) = (b.a(), b.b());
+
+        match self.ir.modifier() {
+            Modifier::A => {b.set_a(a_a);},
+            Modifier::B => {b.set_b(a_b);},
+            Modifier::AB => {b.set_a(a_b);},
+            Modifier::BA => {b.set_b(a_a);},
+            Modifier::F =>
             {
-                b.a = a.a;
-                b.b = a.b;
+                b.set_a(a_a);
+                b.set_b(a_b);
             },
-            OpMode::X =>
+            Modifier::X =>
             {
-                b.a = a.b;
-                b.b = a.a;
+                b.set_a(a_b);
+                b.set_b(a_a);
             },
-            OpMode::I => b = a
+            Modifier::I => b = a
         }
 
         self.store_effective_b(b);
@@ -742,29 +758,32 @@ impl Mars
 
     /// Execute `add` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
     fn exec_add(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
-        match self.ir.op.mode {
-            OpMode::A  => b.a.value = (b.a.value + a.a.value) % self.size() as Value,
-            OpMode::B  => b.b.value = (b.b.value + a.b.value) % self.size() as Value,
-            OpMode::BA => b.a.value = (b.a.value + a.b.value) % self.size() as Value,
-            OpMode::AB => b.b.value = (b.b.value + a.a.value) % self.size() as Value,
-            OpMode::F
-                | OpMode::I =>
+        let (a_a, a_b) = (a.a(), a.b());
+        let (b_a, b_b) = (b.a(), b.b());
+
+        match self.ir.modifier() {
+            Modifier::A  => { b.set_a((b_a + a_a) % self.size() as Value); }
+            Modifier::B  => { b.set_b((b_b + a_b) % self.size() as Value); }
+            Modifier::BA => { b.set_a((b_a + a_b) % self.size() as Value); }
+            Modifier::AB => { b.set_b((b_b + a_a) % self.size() as Value); }
+            Modifier::F
+                | Modifier::I =>
             {
-                b.a.value = (b.a.value + a.a.value) % self.size() as Value;
-                b.b.value = (b.b.value + a.b.value) % self.size() as Value;
-            },
-            OpMode::X =>
+                b.set_a((b_a + a_a) % self.size() as Value);
+                b.set_b((b_b + a_b) % self.size() as Value);
+            }
+            Modifier::X =>
             {
-                b.b.value = (b.b.value + a.a.value) % self.size() as Value;
-                b.a.value = (b.a.value + a.b.value) % self.size() as Value;
-            },
+                b.set_b((b_b + a_a) % self.size() as Value);
+                b.set_a((b_a + a_b) % self.size() as Value);
+            }
         }
 
         self.store_effective_b(b);
@@ -773,29 +792,32 @@ impl Mars
 
     /// Execute `sub` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
     fn exec_sub(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
-        match self.ir.op.mode {
-            OpMode::A => b.a.value -= a.a.value,
-            OpMode::B => b.b.value -= a.b.value,
-            OpMode::BA =>b.a.value -= a.b.value,
-            OpMode::AB =>b.b.value -= a.a.value,
-            OpMode::F
-                | OpMode::I =>
+        let (a_a, a_b) = (a.a(), a.b());
+        let (b_a, b_b) = (b.a(), b.b());
+
+        match self.ir.modifier() {
+            Modifier::A  => { b.set_a((b_a - a_a) % self.size() as Value); }
+            Modifier::B  => { b.set_b((b_b - a_b) % self.size() as Value); }
+            Modifier::BA => { b.set_a((b_a - a_b) % self.size() as Value); }
+            Modifier::AB => { b.set_b((b_b - a_a) % self.size() as Value); }
+            Modifier::F
+                | Modifier::I =>
             {
-                b.a.value -= a.a.value;
-                b.b.value -= a.b.value;
-            },
-            OpMode::X =>
+                b.set_a((b_a - a_a) % self.size() as Value);
+                b.set_b((b_b - a_b) % self.size() as Value);
+            }
+            Modifier::X =>
             {
-                b.b.value -= a.a.value;
-                b.a.value -= a.b.value;
-            },
+                b.set_b((b_b - a_a) % self.size() as Value);
+                b.set_a((b_a - a_b) % self.size() as Value);
+            }
         }
 
         self.store_effective_b(b);
@@ -804,29 +826,32 @@ impl Mars
 
     /// Execute `mul` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
     fn exec_mul(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
-        match self.ir.op.mode {
-            OpMode::A => b.a.value *= a.a.value,
-            OpMode::B => b.b.value *= a.b.value,
-            OpMode::BA =>b.a.value *= a.b.value,
-            OpMode::AB =>b.b.value *= a.a.value,
-            OpMode::F
-                | OpMode::I =>
+        let (a_a, a_b) = (a.a(), a.b());
+        let (b_a, b_b) = (b.a(), b.b());
+
+        match self.ir.modifier() {
+            Modifier::A  => { b.set_a((b_a * a_a) % self.size() as Value); }
+            Modifier::B  => { b.set_b((b_b * a_b) % self.size() as Value); }
+            Modifier::BA => { b.set_a((b_a * a_b) % self.size() as Value); }
+            Modifier::AB => { b.set_b((b_b * a_a) % self.size() as Value); }
+            Modifier::F
+                | Modifier::I =>
             {
-                b.a.value *= a.a.value;
-                b.b.value *= a.b.value;
-            },
-            OpMode::X =>
+                b.set_a((b_a * a_a) % self.size() as Value);
+                b.set_b((b_b * a_b) % self.size() as Value);
+            }
+            Modifier::X =>
             {
-                b.b.value *= a.a.value;
-                b.a.value *= a.b.value;
-            },
+                b.set_b((b_b * a_a) % self.size() as Value);
+                b.set_a((b_a * a_b) % self.size() as Value);
+            }
         }
 
         self.store_effective_b(b);
@@ -835,7 +860,7 @@ impl Mars
 
     /// Execute `div` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
     fn exec_div(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
@@ -843,23 +868,26 @@ impl Mars
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
-        match self.ir.op.mode {
-            OpMode::A => b.a.value /= a.a.value,
-            OpMode::B => b.b.value /= a.b.value,
-            OpMode::BA =>b.a.value /= a.b.value,
-            OpMode::AB =>b.b.value /= a.a.value,
-            OpMode::F
-                | OpMode::I =>
+        let (a_a, a_b) = (a.a(), a.b());
+        let (b_a, b_b) = (b.a(), b.b());
+
+        match self.ir.modifier() {
+            Modifier::A  => { b.set_a((b_a / a_a) % self.size() as Value); }
+            Modifier::B  => { b.set_b((b_b / a_b) % self.size() as Value); }
+            Modifier::BA => { b.set_a((b_a / a_b) % self.size() as Value); }
+            Modifier::AB => { b.set_b((b_b / a_a) % self.size() as Value); }
+            Modifier::F
+                | Modifier::I =>
             {
-                b.a.value /= a.a.value;
-                b.b.value /= a.b.value;
-            },
-            OpMode::X =>
+                b.set_a((b_a / a_a) % self.size() as Value);
+                b.set_b((b_b / a_b) % self.size() as Value);
+            }
+            Modifier::X =>
             {
-                b.b.value /= a.a.value;
-                b.a.value /= a.b.value;
-            },
-        }
+                b.set_b((b_b / a_a) % self.size() as Value);
+                b.set_a((b_a / a_b) % self.size() as Value);
+            }
+        };
 
         self.store_effective_b(b);
         self.step_and_queue_pc()
@@ -867,7 +895,7 @@ impl Mars
 
     /// Execute `mod` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
     fn exec_mod(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
@@ -875,23 +903,26 @@ impl Mars
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
-        match self.ir.op.mode {
-            OpMode::A => b.a.value %= a.a.value,
-            OpMode::B => b.b.value %= a.b.value,
-            OpMode::BA =>b.a.value %= a.b.value,
-            OpMode::AB =>b.b.value %= a.a.value,
-            OpMode::F
-                | OpMode::I =>
+        let (a_a, a_b) = (a.a(), a.b());
+        let (b_a, b_b) = (b.a(), b.b());
+
+        match self.ir.modifier() {
+            Modifier::A  => { b.set_a((b_a % a_a) % self.size() as Value); }
+            Modifier::B  => { b.set_b((b_b % a_b) % self.size() as Value); }
+            Modifier::BA => { b.set_a((b_a % a_b) % self.size() as Value); }
+            Modifier::AB => { b.set_b((b_b % a_a) % self.size() as Value); }
+            Modifier::F
+                | Modifier::I =>
             {
-                b.a.value %= a.a.value;
-                b.b.value %= a.b.value;
-            },
-            OpMode::X =>
+                b.set_a((b_a % a_a) % self.size() as Value);
+                b.set_b((b_b % a_b) % self.size() as Value);
+            }
+            Modifier::X =>
             {
-                b.b.value %= a.a.value;
-                b.a.value %= a.b.value;
-            },
-        }
+                b.set_b((b_b % a_a) % self.size() as Value);
+                b.set_a((b_a % a_b) % self.size() as Value);
+            }
+        };
 
         self.store_effective_b(b);
         self.step_and_queue_pc()
@@ -899,14 +930,14 @@ impl Mars
 
     /// Execute `jmp` instruction
     ///
-    /// Supported OpModes: `B`
+    /// Supported Modifiers: `B`
     fn exec_jmp(&mut self) -> SimulationEvent
     {
-        match self.ir.a.mode {
+        match self.ir.a_mode() {
             AddressingMode::Immediate
                 | AddressingMode::Direct =>
             {
-                let offset = self.ir.a.value;
+                let offset = self.ir.a();
                 self.jump_and_queue_pc(offset);
             }
             // TODO
@@ -918,20 +949,20 @@ impl Mars
 
     /// Execute `jmz` instruction
     ///
-    /// Supported OpModes: `B`
+    /// Supported Modifiers: `B`
     fn exec_jmz(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
-        let offset = self.ir.a.value; // TODO: needs to calculate jump offset
+        let offset = self.ir.a(); // TODO: needs to calculate jump offset
 
-        let jump = match self.ir.op.mode {
-            OpMode::A
-                | OpMode::BA => b.a.value == 0,
-            OpMode::B
-                | OpMode::AB => b.b.value == 0,
-            OpMode::F
-                | OpMode::I
-                | OpMode::X => b.a.value == 0 && b.b.value == 0,
+        let jump = match self.ir.modifier() {
+            Modifier::A
+                | Modifier::BA => b.a() == 0,
+            Modifier::B
+                | Modifier::AB => b.b() == 0,
+            Modifier::F
+                | Modifier::I
+                | Modifier::X => b.a() == 0 && b.b() == 0,
         };
 
         if jump {
@@ -943,20 +974,20 @@ impl Mars
 
     /// Execute `jmn` instruction
     ///
-    /// Supported OpModes: `B`
+    /// Supported Modifiers: `B`
     fn exec_jmn(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
-        let offset = self.ir.a.value; // TODO: needs to calculate jump offset
+        let offset = self.ir.a(); // TODO: needs to calculate jump offset
 
-        let jump = match self.ir.op.mode {
-            OpMode::A
-                | OpMode::BA => b.a.value != 0,
-            OpMode::B
-                | OpMode::AB => b.b.value != 0,
-            OpMode::F
-                | OpMode::I
-                | OpMode::X => b.a.value != 0 && b.b.value != 0,
+        let jump = match self.ir.modifier() {
+            Modifier::A
+                | Modifier::BA => b.a() != 0,
+            Modifier::B
+                | Modifier::AB => b.b() != 0,
+            Modifier::F
+                | Modifier::I
+                | Modifier::X => b.a() != 0 && b.b() != 0,
         };
 
         if jump {
@@ -968,24 +999,26 @@ impl Mars
 
     /// Execute `djn` instruction
     ///
-    /// Supported OpModes: `B`
+    /// Supported Modifiers: `B`
     fn exec_djn(&mut self) -> SimulationEvent
     {
         // predecrement the instruction before checking if its not zero
         let mut b = self.fetch_effective_b();
-        match self.ir.op.mode {
-            OpMode::A
-                | OpMode::BA => b.a.value -= 1,
-            OpMode::B
-                | OpMode::AB => b.b.value -= 1,
-            OpMode::F
-                | OpMode::I
-                | OpMode::X =>
+        let (b_a, b_b) = (b.a(), b.b());
+
+        match self.ir.modifier() {
+            Modifier::A
+                | Modifier::BA => { b.set_a(b_a - 1); },
+            Modifier::B
+                | Modifier::AB => { b.set_b(b_b - 1); },
+            Modifier::F
+                | Modifier::I
+                | Modifier::X =>
             {
-                b.a.value -= 1;
-                b.b.value -= 1;
+                b.set_a(b_a - 1);
+                b.set_b(b_b - 1);
             }
-        }
+        };
         self.store_effective_b(b);
 
         self.exec_jmn()
@@ -993,7 +1026,7 @@ impl Mars
 
     /// Execute `spl` instruction
     ///
-    /// Supported OpModes: `B`
+    /// Supported Modifiers: `B`
     fn exec_spl(&mut self) -> SimulationEvent
     {
         if self.process_count() < self.max_processes(){
@@ -1009,22 +1042,22 @@ impl Mars
 
     /// Execute `seq` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_seq(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
 
-        let skip = match self.ir.op.mode {
-            OpMode::A       => a.a.value == b.b.value,
-            OpMode::B       => a.b.value == b.b.value,
-            OpMode::BA      => a.a.value == b.b.value,
-            OpMode::AB      => a.b.value == b.a.value,
-            OpMode::X       => a.b.value == b.a.value &&
-                               a.a.value == b.b.value,
-            OpMode::F
-                | OpMode::I => a.a.value == b.a.value &&
-                               a.b.value == b.b.value,
+        let skip = match self.ir.modifier() {
+            Modifier::A       => a.a() == b.b(),
+            Modifier::B       => a.b() == b.b(),
+            Modifier::BA      => a.a() == b.b(),
+            Modifier::AB      => a.b() == b.a(),
+            Modifier::X       => a.b() == b.a() &&
+                                 a.a() == b.b(),
+            Modifier::F
+                | Modifier::I => a.a() == b.a() &&
+                                 a.b() == b.b(),
         };
 
         if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
@@ -1032,22 +1065,22 @@ impl Mars
 
     /// Execute `sne` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_sne(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
 
-        let skip = match self.ir.op.mode {
-            OpMode::A       => a.a.value != b.b.value,
-            OpMode::B       => a.b.value != b.b.value,
-            OpMode::BA      => a.a.value != b.b.value,
-            OpMode::AB      => a.b.value != b.a.value,
-            OpMode::X       => a.b.value != b.a.value &&
-                               a.a.value != b.b.value,
-            OpMode::F
-                | OpMode::I => a.a.value != b.a.value &&
-                               a.b.value != b.b.value,
+        let skip = match self.ir.modifier() {
+            Modifier::A       => a.a() != b.b(),
+            Modifier::B       => a.b() != b.b(),
+            Modifier::BA      => a.a() != b.b(),
+            Modifier::AB      => a.b() != b.a(),
+            Modifier::X       => a.b() != b.a() &&
+                                 a.a() != b.b(),
+            Modifier::F
+                | Modifier::I => a.a() != b.a() &&
+                                 a.b() != b.b(),
         };
 
         if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
@@ -1055,22 +1088,22 @@ impl Mars
 
     /// Execute `slt` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_slt(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
         let b = self.fetch_effective_b();
 
-        let skip = match self.ir.op.mode {
-            OpMode::A       => a.a.value < b.b.value,
-            OpMode::B       => a.b.value < b.b.value,
-            OpMode::BA      => a.a.value < b.b.value,
-            OpMode::AB      => a.b.value < b.a.value,
-            OpMode::X       => a.b.value < b.a.value &&
-                               a.a.value < b.b.value,
-            OpMode::F
-                | OpMode::I => a.a.value < b.a.value &&
-                               a.b.value < b.b.value,
+        let skip = match self.ir.modifier() {
+            Modifier::A       => a.a() < b.b(),
+            Modifier::B       => a.b() < b.b(),
+            Modifier::BA      => a.a() < b.b(),
+            Modifier::AB      => a.b() < b.a(),
+            Modifier::X       => a.b() < b.a() &&
+                                 a.a() < b.b(),
+            Modifier::F
+                | Modifier::I => a.a() < b.a() &&
+                                 a.b() < b.b(),
         };
 
         if skip { self.skip_and_queue_pc() } else { self.step_and_queue_pc() }
@@ -1078,7 +1111,7 @@ impl Mars
 
     /// Execute `ldp` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_ldp(&mut self) -> SimulationEvent
     {
         unimplemented!();
@@ -1086,7 +1119,7 @@ impl Mars
 
     /// Execute `stp` instruction
     ///
-    /// Supported OpModes: `A` `B` `AB` `BA` `X` `F` `I`
+    /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
     fn exec_stp(&mut self) -> SimulationEvent
     {
         unimplemented!();
@@ -1120,7 +1153,7 @@ mod test_mars
     {
         let mut mars = MarsBuilder::new().build();
         let max_length = mars.max_length();
-        let prog = vec![Instruction::default(); max_length - 1];
+        let prog = vec![Default::default(); max_length - 1];
 
         assert_eq!(Ok(()), mars.load(0, None, &prog));
     }
@@ -1130,7 +1163,7 @@ mod test_mars
     {
         let mut mars = MarsBuilder::new().build();
         let max_length = mars.max_length();
-        let prog = vec![Instruction::default(); max_length + 1];
+        let prog = vec![Default::default(); max_length + 1];
 
         assert_eq!(
             Err(LoadError::InvalidLength),
@@ -1146,7 +1179,7 @@ mod test_mars
             .min_distance(10)
             .build();
 
-        let useless_program = vec![Instruction::default(); 1];
+        let useless_program = vec![Default::default(); 1];
 
         // intentionally load the programs with invalid spacings
         let result = mars.load_batch(vec![
@@ -1165,10 +1198,10 @@ mod test_mars
             .build();
         
         // transform the instruction so we can recognize it in memory
-        let mut program = vec![Instruction::default(); 4];
+        let mut program = vec![Default::default(); 4];
         for (i, e) in program.iter_mut().enumerate() {
             e.op.code = OpCode::Mov;
-            e.a.value = i as Value;
+            e.a() = i as Value;
         }
 
         let result = mars.load(14, None, &program);
@@ -1188,7 +1221,7 @@ mod test_mars
             .max_length(10)
             .build();
 
-        let useless_program = vec![Instruction::default(); 9];
+        let useless_program = vec![Default::default(); 9];
 
         // intentionally load the programs with invalid spacings
         let result = mars.load_batch(vec![
@@ -1212,7 +1245,7 @@ mod test_mars
     fn test_dat()
     {
         let mut mars = MarsBuilder::new().build_and_load(vec![
-            (0, None, &vec![Instruction::default(); 1])
+            (0, None, &vec![Default::default(); 1])
             ])
             .unwrap();
 
@@ -1228,7 +1261,7 @@ mod test_mars
             Instruction {
                 op: OpField {
                     code: OpCode::Mov,
-                    mode: OpMode::I
+                    mode: Modifier::I
                 },
                 a: Field {
                     value: 0,
@@ -1263,7 +1296,7 @@ mod test_mars
             Instruction {
                 op: OpField {
                     code: OpCode::Spl,
-                    mode: OpMode::I
+                    mode: Modifier::I
                 },
                 a: Field {
                     value: 2,
@@ -1277,7 +1310,7 @@ mod test_mars
             Instruction {
                 op: OpField {
                     code: OpCode::Jmp,
-                    mode: OpMode::I
+                    mode: Modifier::I
                 },
                 a: Field {
                     value: -1,
@@ -1291,7 +1324,7 @@ mod test_mars
             Instruction {
                 op: OpField {
                     code: OpCode::Mov,
-                    mode: OpMode::I
+                    mode: Modifier::I
                 },
                 a: Field {
                     value: 0,

@@ -2,7 +2,9 @@
 
 use std::collections::{VecDeque, HashMap};
 
-use redcode::{Instruction, Pin, Address, Program};
+use redcode::types::*;
+use redcode::traits::Instruction;
+
 use simulation::Mars;
 use simulation::LoadResult;
 
@@ -70,8 +72,9 @@ impl MarsBuilder
     }
 
     /// Build a core and load it with specified programs
-    pub fn build_and_load(&self, programs: Vec<(Address, Option<Pin>, &Program)>) 
-        -> LoadResult<Mars>
+    pub fn build_and_load<T>(&self, programs: Vec<(Address, Option<Pin>, &Vec<T>)>) 
+        -> LoadResult<Mars<T>>
+        where T: Instruction
     {
         let mut core = self.build();
         if programs.len() > 0 {
@@ -81,10 +84,11 @@ impl MarsBuilder
     }
 
     /// Build a halted mars
-    pub fn build(&self) -> Mars
+    pub fn build<T>(&self) -> Mars<T>
+        where T: Instruction
     {
         // create core resources
-        let mem    = vec![Instruction::default(); self.size];
+        let mem    = vec![T::default(); self.size];
         let pq     = VecDeque::new();
         let pspace = HashMap::new();
 
@@ -95,7 +99,7 @@ impl MarsBuilder
             process_queue: pq,
             pspace:        pspace,
             halted:        true,
-            ir:            Instruction::default(),
+            ir:            Default::default(),
 
             // Load constraints
             max_length:    self.max_length,
