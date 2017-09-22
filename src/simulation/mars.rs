@@ -225,6 +225,7 @@ where T: traits::Instruction
     }
 
     /// Halt the Mars
+    #[inline]
     fn halt(&mut self) -> SimulationEvent
     {
         self.halted = true;
@@ -313,6 +314,7 @@ where T: traits::Instruction
     ///
     /// # Panics
     /// * Panics is the process queue is empty
+    #[inline]
     pub fn pc(&self) -> Address
     {
         self.pc
@@ -331,12 +333,14 @@ where T: traits::Instruction
     }
 
     /// Current cycle core is executing
+    #[inline]
     pub fn cycle(&self) -> usize
     {
         self.cycle
     }
 
     /// Get the current `Pid` executing
+    #[inline]
     pub fn pid(&self) -> Pid
     {
         self.pid
@@ -358,30 +362,35 @@ where T: traits::Instruction
     }
 
     /// Size of private storage space
+    #[inline]
     pub fn pspace_size(&self) -> usize
     {
         self.pspace_size
     }
 
     /// Version of core multiplied by `100`
+    #[inline]
     pub fn version(&self) -> usize
     {
         self.version
     }
 
     /// Maximum number of processes that can be in the core queue
+    #[inline]
     pub fn max_processes(&self) -> usize
     {
         self.max_processes
     }
 
     /// Maximum number of cycles before a tie is declared
+    #[inline]
     pub fn max_cycles(&self) -> usize
     {
         self.max_cycles
     }
 
     /// Maximum number of instructions allowed in a program
+    #[inline]
     pub fn max_length(&self) -> usize
     {
         self.max_length
@@ -412,7 +421,7 @@ where T: traits::Instruction
     }
 
     /// Fetch reference to current queue
-    fn current_queue(&self) -> Option<&VecDeque<Address>>
+    pub fn current_queue(&self) -> Option<&VecDeque<Address>>
     {
         if let Some(&(_, ref q)) = self.process_queue.front() {
             Some(q)
@@ -432,6 +441,7 @@ where T: traits::Instruction
     }
 
     /// Execute the instrcution in the `Instruction` register
+    #[inline]
     fn execute(&mut self) -> SimulationEvent
     {
         match self.ir.op() {
@@ -693,6 +703,7 @@ where T: traits::Instruction
     /// Execute `dat` instruction
     ///
     /// Supported Modifiers: None
+    #[inline]
     fn exec_dat(&mut self) -> SimulationEvent
     {
         let _ = self.current_queue_mut().unwrap().pop_front();
@@ -702,13 +713,13 @@ where T: traits::Instruction
     /// Execute `mov` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
+    #[inline]
     fn exec_mov(&mut self) -> SimulationEvent
     {
         let a     = self.fetch_effective_a();
         let mut b = self.fetch_effective_b();
 
         let (a_a, a_b) = (a.a(), a.b());
-        let (b_a, b_b) = (b.a(), b.b());
 
         match self.ir.modifier() {
             Modifier::A => {b.set_a(a_a);},
@@ -735,6 +746,7 @@ where T: traits::Instruction
     /// Execute `add` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
+    #[inline]
     fn exec_add(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
@@ -769,6 +781,7 @@ where T: traits::Instruction
     /// Execute `sub` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
+    #[inline]
     fn exec_sub(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
@@ -803,6 +816,7 @@ where T: traits::Instruction
     /// Execute `mul` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
+    #[inline]
     fn exec_mul(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
@@ -837,6 +851,7 @@ where T: traits::Instruction
     /// Execute `div` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
+    #[inline]
     fn exec_div(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
@@ -872,6 +887,7 @@ where T: traits::Instruction
     /// Execute `mod` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F`
+    #[inline]
     fn exec_mod(&mut self) -> SimulationEvent
     {
         // TODO: math needs to be done modulo core size
@@ -907,6 +923,7 @@ where T: traits::Instruction
     /// Execute `jmp` instruction
     ///
     /// Supported Modifiers: `B`
+    #[inline]
     fn exec_jmp(&mut self) -> SimulationEvent
     {
         match self.ir.a_mode() {
@@ -926,6 +943,7 @@ where T: traits::Instruction
     /// Execute `jmz` instruction
     ///
     /// Supported Modifiers: `B`
+    #[inline]
     fn exec_jmz(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
@@ -951,6 +969,7 @@ where T: traits::Instruction
     /// Execute `jmn` instruction
     ///
     /// Supported Modifiers: `B`
+    #[inline]
     fn exec_jmn(&mut self) -> SimulationEvent
     {
         let b = self.fetch_effective_b();
@@ -976,6 +995,7 @@ where T: traits::Instruction
     /// Execute `djn` instruction
     ///
     /// Supported Modifiers: `B`
+    #[inline]
     fn exec_djn(&mut self) -> SimulationEvent
     {
         // predecrement the instruction before checking if its not zero
@@ -1003,6 +1023,7 @@ where T: traits::Instruction
     /// Execute `spl` instruction
     ///
     /// Supported Modifiers: `B`
+    #[inline]
     fn exec_spl(&mut self) -> SimulationEvent
     {
         if self.process_count() < self.max_processes(){
@@ -1019,6 +1040,7 @@ where T: traits::Instruction
     /// Execute `seq` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
+    #[inline]
     fn exec_seq(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
@@ -1042,6 +1064,7 @@ where T: traits::Instruction
     /// Execute `sne` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
+    #[inline]
     fn exec_sne(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
@@ -1065,6 +1088,7 @@ where T: traits::Instruction
     /// Execute `slt` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
+    #[inline]
     fn exec_slt(&mut self) -> SimulationEvent
     {
         let a = self.fetch_effective_a();
@@ -1088,6 +1112,7 @@ where T: traits::Instruction
     /// Execute `ldp` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
+    #[inline]
     fn exec_ldp(&mut self) -> SimulationEvent
     {
         match self.ir.modifier() {
@@ -1098,6 +1123,7 @@ where T: traits::Instruction
     /// Execute `stp` instruction
     ///
     /// Supported Modifiers: `A` `B` `AB` `BA` `X` `F` `I`
+    #[inline]
     fn exec_stp(&mut self) -> SimulationEvent
     {
         match self.ir.modifier() {
@@ -1106,6 +1132,7 @@ where T: traits::Instruction
     }
 
     /// Execute 'nop' instruction
+    #[inline]
     fn exec_nop(&mut self) -> SimulationEvent
     {
         self.step_and_queue_pc()
@@ -1113,12 +1140,42 @@ where T: traits::Instruction
 }
 
 #[cfg(test)]
-mod test_mars
+mod test
 {
     use simulation::MarsBuilder;
     use redcode::traits::Instruction;
     use redcode::Instruction as InstructionStruct;
     use super::*;
+
+    fn mov_test_program(modifier: Modifier) -> Vec<InstructionStruct>
+    {
+        vec![
+            InstructionStruct::new(
+                OpCode::Mov,
+                modifier,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Dat,
+                Modifier::I,
+                1,
+                AddressingMode::Direct,
+                2,
+                AddressingMode::Direct
+                ),
+            InstructionStruct::new(
+                OpCode::Mov,
+                Modifier::I,
+                3,
+                AddressingMode::Direct,
+                4,
+                AddressingMode::Direct
+                )
+        ]
+    }
 
     #[test]
     fn test_load_batch_fails_empty_vector()
@@ -1157,12 +1214,12 @@ mod test_mars
             .max_length(10)
             .build();
 
-        let useless_program = vec![Default::default(); 9];
+        let useless_program = vec![Default::default(); 10];
 
         // intentionally load the programs with invalid spacings
         let result = mars.load_batch(vec![
             (0, None, &useless_program),
-            (11, None, &useless_program),
+            (21, None, &useless_program),
         ]);
         
         assert_eq!(Ok(()), result);
@@ -1178,7 +1235,7 @@ mod test_mars
     }
 
     #[test]
-    fn test_dat()
+    pub fn test_dat()
     {
         let mut mars: Mars<InstructionStruct> = MarsBuilder::new().build_and_load(vec![
             (0, None, &vec![Default::default(); 1])
@@ -1193,32 +1250,7 @@ mod test_mars
     #[test]
     fn test_mov_i_mode()
     {
-        let prog = vec![
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::I,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Dat,
-                Modifier::I,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::I,
-                3,
-                AddressingMode::Direct,
-                4,
-                AddressingMode::Direct
-                )
-        ]; 
+        let prog = mov_test_program(Modifier::I);
 
         let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
             .build_and_load(vec![
@@ -1227,43 +1259,16 @@ mod test_mars
             .unwrap();
 
         let init_pc    = mars.pc();
-        let init_cycle = mars.cycle();
 
         assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
         assert_eq!(prog[1],                      mars.memory()[2]);
         assert_eq!(init_pc + 1,                  mars.pc());
-        assert_eq!(init_cycle + 1,               mars.cycle());
     }
 
     #[test]
     fn test_mov_a_mode()
     {
-        let prog: Vec<InstructionStruct> = vec![
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::A,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Dat,
-                Modifier::I,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::I,
-                3,
-                AddressingMode::Direct,
-                4,
-                AddressingMode::Direct
-                )
-        ]; 
+        let prog = mov_test_program(Modifier::A);
 
         let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
             .build_and_load(vec![
@@ -1272,43 +1277,17 @@ mod test_mars
             .unwrap();
 
         let init_pc    = mars.pc();
-        let init_cycle = mars.cycle();
 
         assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
         assert_eq!(prog[1].a(),                  mars.memory()[2].a());
+        assert_eq!(prog[1].a_mode(),             mars.memory()[2].a_mode());
         assert_eq!(init_pc + 1,                  mars.pc());
-        assert_eq!(init_cycle + 1,               mars.cycle());
     }
 
     #[test]
     fn test_mov_b_mode()
     {
-        let prog: Vec<InstructionStruct> = vec![
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::B,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Dat,
-                Modifier::I,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::I,
-                3,
-                AddressingMode::Direct,
-                4,
-                AddressingMode::Direct
-                )
-        ]; 
+        let prog = mov_test_program(Modifier::B);
 
         let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
             .build_and_load(vec![
@@ -1317,43 +1296,17 @@ mod test_mars
             .unwrap();
 
         let init_pc    = mars.pc();
-        let init_cycle = mars.cycle();
 
         assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
         assert_eq!(prog[1].b(),                  mars.memory()[2].b());
+        assert_eq!(prog[1].b_mode(),             mars.memory()[2].b_mode());
         assert_eq!(init_pc + 1,                  mars.pc());
-        assert_eq!(init_cycle + 1,               mars.cycle());
     }
 
     #[test]
     fn test_mov_ab_mode()
     {
-        let prog: Vec<InstructionStruct> = vec![
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::AB,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Dat,
-                Modifier::I,
-                1,
-                AddressingMode::Direct,
-                2,
-                AddressingMode::Direct
-                ),
-            InstructionStruct::new(
-                OpCode::Mov,
-                Modifier::I,
-                3,
-                AddressingMode::Direct,
-                4,
-                AddressingMode::Direct
-                )
-        ]; 
+        let prog = mov_test_program(Modifier::AB);
 
         let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
             .build_and_load(vec![
@@ -1362,12 +1315,71 @@ mod test_mars
             .unwrap();
 
         let init_pc    = mars.pc();
-        let init_cycle = mars.cycle();
 
         assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
         assert_eq!(prog[1].b(),                  mars.memory()[2].a());
+        assert_eq!(prog[1].b_mode(),             mars.memory()[2].a_mode());
         assert_eq!(init_pc + 1,                  mars.pc());
-        assert_eq!(init_cycle + 1,               mars.cycle());
+    }
+
+    #[test]
+    fn test_mov_ba_mode()
+    {
+        let prog = mov_test_program(Modifier::BA);
+
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .build_and_load(vec![
+                (0, None, &prog)
+            ])
+            .unwrap();
+
+        let init_pc    = mars.pc();
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(prog[1].a(),                  mars.memory()[2].b());
+        assert_eq!(prog[1].a_mode(),             mars.memory()[2].b_mode());
+        assert_eq!(init_pc + 1,                  mars.pc());
+    }
+
+    #[test]
+    fn test_mov_x_mode()
+    {
+        let prog = mov_test_program(Modifier::X);
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .build_and_load(vec![
+                (0, None, &prog)
+            ])
+            .unwrap();
+
+        let init_pc    = mars.pc();
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(prog[1].a(),                  mars.memory()[2].b());
+        assert_eq!(prog[1].a_mode(),             mars.memory()[2].b_mode());
+        assert_eq!(prog[1].b(),                  mars.memory()[2].a());
+        assert_eq!(prog[1].b_mode(),             mars.memory()[2].a_mode());
+        assert_eq!(init_pc + 1,                  mars.pc());
+    }
+
+    #[test]
+    fn test_mov_f_mode()
+    {
+        let prog = mov_test_program(Modifier::F);
+
+        let mut mars: Mars<InstructionStruct> = MarsBuilder::new()
+            .build_and_load(vec![
+                (0, None, &prog)
+            ])
+            .unwrap();
+
+        let init_pc    = mars.pc();
+
+        assert_eq!(Ok(SimulationEvent::Stepped), mars.step());
+        assert_eq!(prog[1].a(),                  mars.memory()[2].a());
+        assert_eq!(prog[1].a_mode(),             mars.memory()[2].a_mode());
+        assert_eq!(prog[1].b(),                  mars.memory()[2].b());
+        assert_eq!(prog[1].b_mode(),             mars.memory()[2].b_mode());
+        assert_eq!(init_pc + 1,                  mars.pc());
     }
 
     #[test]
