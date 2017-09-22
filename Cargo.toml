@@ -3,6 +3,11 @@ name = "libcw"
 version = "0.1.0"
 authors = ["Will Johnston <wbjohnston@gmail.com>"]
 
+[features]
+default = ["parser", "mars"]
+parser = ["regex", "lazy_static"]
+mars = []
+
 [dependencies]
-regex = "0.2"
-lazy_static = "0.2"
+regex = { version = "0.2", optional = true}
+lazy_static = { version = "0.2", optional = true}
