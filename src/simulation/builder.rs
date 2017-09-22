@@ -100,6 +100,8 @@ impl MarsBuilder
             pspace:        pspace,
             halted:        true,
             ir:            Default::default(),
+            pc:            0,
+            pid:           Default::default(),
 
             // Load constraints
             max_length:    self.max_length,

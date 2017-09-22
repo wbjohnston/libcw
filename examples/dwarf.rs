@@ -2,9 +2,12 @@
 
 use std::thread;
 use std::time;
+use std::fmt;
 
 extern crate libcw;
-use libcw::redcode::*;
+use libcw::redcode::types::*;
+use libcw::redcode::Instruction;
+use libcw::redcode::traits;
 use libcw::simulation::{MarsBuilder, Mars};
 
 /// Display the state of the MARS on `stdout`
@@ -12,12 +15,13 @@ use libcw::simulation::{MarsBuilder, Mars};
 /// # Arguments
 /// * `mars`: pointer to `Mars`
 /// * `margin`: memory addresses before and after pc to display
-fn display_mars_state(mars: &Mars, margin: usize)
+fn display_mars_state<T>(mars: &Mars<T>, margin: usize)
+    where T: traits::Instruction + fmt::Display
 {
-    let pc = mars.pc() as usize;
-    let pid = mars.pid();
+    let pc    = mars.pc() as usize;
+    let pid   = mars.pid();
     let cycle = mars.cycle();
-    let size = mars.size();
+    let size  = mars.size();
 
     // print header
     println!("| Cycle: {} | PC: {} | PID: {} |", cycle, pc, pid);
@@ -46,67 +50,43 @@ fn display_mars_state(mars: &Mars, margin: usize)
 fn main()
 {
     let dwarf = vec![
-        Instruction {
-            op: OpField {
-                code: OpCode::Add,
-                mode: OpMode::AB
-            },
-            a: Field {
-                value: 4,
-                mode: AddressingMode::Immediate
-            },
-            b: Field {
-                value: 3,
-                mode: AddressingMode::Direct
-            }
-        },
-        Instruction {
-            op: OpField {
-                code: OpCode::Mov,
-                mode: OpMode::I
-            },
-            a: Field {
-                value: 2,
-                mode: AddressingMode::Direct
-            },
-            b: Field {
-                value: 2,
-                mode: AddressingMode::BIndirect
-            }
-        },
-        Instruction {
-            op: OpField {
-                code: OpCode::Jmp,
-                mode: OpMode::I
-            },
-            a: Field {
-                value: -2,
-                mode: AddressingMode::Direct
-            },
-            b: Field {
-                value: 0,
-                mode: AddressingMode::Direct
-            }
-        },
-        Instruction {
-            op: OpField {
-                code: OpCode::Dat,
-                mode: OpMode::I
-            },
-            a: Field {
-                value: 0,
-                mode: AddressingMode::Immediate
-            },
-            b: Field {
-                value: 0,
-                mode: AddressingMode::Immediate
-            }
-        },
+        Instruction::new(
+            OpCode::Add,
+            Modifier::AB,
+            4,
+            AddressingMode::Immediate,
+            3,
+            AddressingMode::Direct
+            ),
+        Instruction::new(
+            OpCode::Mov,
+            Modifier::I,
+            2,
+            AddressingMode::Direct,
+            2,
+            AddressingMode::BIndirect
+            ),
+        Instruction::new(
+            OpCode::Jmp,
+            Modifier::I,
+            -2,
+            AddressingMode::Direct,
+            0,
+            AddressingMode::Direct
+            ),
+        Instruction::new(
+            OpCode::Dat,
+            Modifier::I,
+            0,
+            AddressingMode::Direct,
+            0,
+            AddressingMode::Direct
+            ),
+
     ]; 
 
     // create mars
     let mut mars = MarsBuilder::new()
-        // .max_cycles(10)
         .build_and_load(vec![(4000, None, &dwarf)])
         .unwrap();
 
@@ -115,9 +95,9 @@ fn main()
 
     // run
     while !mars.halted() {
-        thread::sleep(time::Duration::from_millis(500));
+        thread::sleep(time::Duration::from_millis(1000));
         let _ = mars.step(); 
-        display_mars_state(&mars, 25);
+        display_mars_state(&mars, 5);
     }
 }
 

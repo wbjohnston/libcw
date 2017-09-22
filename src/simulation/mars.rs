@@ -66,6 +66,10 @@ pub struct Mars<T>
     /// Instruction register
     pub(super) ir:            T,
 
+    pub(super) pid:           Pid,
+
+    pub(super) pc:            Address,
+
     /// Current numbered cycle core is executing
     pub(super) cycle:         usize,
 
@@ -205,8 +209,10 @@ where T: Instruction
             Ok(self.halt())
         } else {
             // Fetch new queue
-            let q = self.process_queue.pop_front().unwrap();
-            self.process_queue.push_back(q);
+            let &mut(curr_pid, ref mut curr_q) = self.process_queue.front_mut().unwrap();
+            println!("{:?}", curr_q);
+            self.pid = curr_pid;
+            self.pc = curr_q.pop_front().unwrap();
             self.cycle += 1;
             Ok(exec_event)
         }
@@ -248,51 +254,6 @@ where T: Instruction
         self.reset();
     }
 
-    /// Load a program, checking only its length for validity
-    /// # Arguments
-    /// * `dest`: memory address program will be loaded to
-    /// * `pin`: the `Pin` that the program will use to access it's private st
-    ///     storage
-    /// * `prog`: reference to the program to load
-    ///
-    /// # Return
-    /// If the program is loaded successfully `Ok(()). Otherwise, the program 
-    ///     was too long. This is the only load constraint that is checked in
-    ///     a singleton load
-    pub fn load(&mut self, dest: Address, pin: Option<Pin>, prog: &Vec<T>)
-        -> LoadResult<()>
-    {
-        let dest = dest % self.size() as Address;
-        let valid_length = prog.len() <= self.max_length();
-
-        if valid_length {
-            // load program into memory
-            let pin = pin.unwrap_or(self.process_count() as Pid);
-            let iter = (0..self.size())
-                .cycle()
-                .skip(dest as usize)
-                .take(prog.len())
-                .enumerate();
-
-            for (i, j) in iter {
-                self.memory[j] = prog[i].clone();
-            }
-
-            // Create pspace
-            self.pspace.insert(pin, vec![0; self.pspace_size]);
-
-            // Add to process queue
-            let mut q = VecDeque::new();
-            q.push_front(dest);
-            self.process_queue.push_front((pin, q));
-
-            self.halted = false;
-            Ok(())
-        } else {
-            Err(LoadError::InvalidLength)
-        }
-    }
-
     /// Load mutliple programs into the Mars, checking their spacing and their
     /// length
     /// # Arguments
@@ -313,9 +274,36 @@ where T: Instruction
         let valid_margin = true; // TODO
 
         if valid_margin {
+            // load each program
             for &(dest, maybe_pin, ref prog) in programs.iter() {
-                self.load(dest, maybe_pin, prog)?; 
+                let pin = maybe_pin.unwrap_or(self.process_count() as Pid);
+
+                let cycle_memory_iter = (0..self.size())
+                    .cycle()
+                    .skip(dest as usize)
+                    .take(prog.len())
+                    .enumerate();
+
+                // copy program into memory
+                for (i, j) in cycle_memory_iter {
+                    self.memory[j] = prog[i].clone();
+                }
+
+                self.pspace.insert(pin, vec![0; self.pspace_size]);
+
+                let mut q = VecDeque::new();
+                q.push_front(dest);
+                self.process_queue.push_front((pin, q));
             }
+
+            self.halted = false;
+
+            let &mut (curr_pid, ref mut curr_q) = self.process_queue.front_mut()
+                .unwrap();
+
+            self.pc = curr_q.pop_front().unwrap();
+            self.pid = curr_pid;
+                
             Ok(())
         } else {
             Err(LoadError::InvalidDistance)
@@ -328,22 +316,13 @@ where T: Instruction
     /// * Panics is the process queue is empty
     pub fn pc(&self) -> Address
     {
-        self.current_queue().unwrap().front().unwrap().clone()
-    }
-
-    /// Get mutable reference to current program counter
-    ///
-    /// # Panics
-    /// * Panics is the process queue is empty
-    fn pc_mut(&mut self) -> &mut Address
-    {
-        self.current_queue_mut().unwrap().front_mut().unwrap()
+        self.pc
     }
 
     /// Get the program counters for all processes
     pub fn pcs(&self) -> Vec<Address>
     {
-        let mut pcs = vec![];
+        let mut pcs = vec![self.pc()];
 
         for &(_, ref q) in &self.process_queue {
             pcs.extend(q.iter().cloned());
@@ -361,15 +340,14 @@ where T: Instruction
     /// Get the current `Pid` executing
     pub fn pid(&self) -> Pid
     {
-        let &(pid, _) = self.process_queue.front().unwrap();
-        pid
+        self.pid
     }
 
     /// Get all `Pid`s that are currently active in the order they will be 
     /// executing
     pub fn pids(&self) -> Vec<Pid>
     {
-        let mut pids = vec![];
+        let mut pids = vec![self.pid()];
         pids.extend(self.process_queue.iter().map(|&(pid, _)| pid));
         pids
     }
@@ -557,7 +535,7 @@ where T: Instruction
     fn step_pc(&mut self) -> SimulationEvent
     {
         let pc = self.pc();
-        *self.pc_mut() = (pc + 1) % self.size() as Address;
+        self.pc = (pc + 1) % self.size() as Address;
         SimulationEvent::Stepped
     }
 
@@ -566,7 +544,7 @@ where T: Instruction
     {
         let pc = self.pc();
         // TODO: Holy shit this is uuugggglllllyyyy
-        *self.pc_mut() = (pc + 2) % self.size() as Address;
+        self.pc = (pc + 2) % self.size() as Address;
         SimulationEvent::Skipped
     }
 
@@ -577,7 +555,7 @@ where T: Instruction
     fn jump_pc(&mut self, offset: Value) -> SimulationEvent
     {
         let pc = self.pc();
-        *self.pc_mut() = self.calc_addr_offset(pc, offset);
+        self.pc = self.calc_addr_offset(pc, offset);
         SimulationEvent::Jumped
     }
 
@@ -587,7 +565,7 @@ where T: Instruction
     {
         self.step_pc();
 
-        let pc = self.current_queue_mut().unwrap().pop_front().unwrap();
+        let pc = self.pc();
         self.current_queue_mut().unwrap().push_back(pc);
         SimulationEvent::Stepped
     }
@@ -598,7 +576,7 @@ where T: Instruction
     {
         self.skip_pc();
 
-        let pc = self.current_queue_mut().unwrap().pop_front().unwrap();
+        let pc = self.pc();
         self.current_queue_mut().unwrap().push_back(pc);
         SimulationEvent::Skipped
     }
@@ -613,7 +591,7 @@ where T: Instruction
         self.jump_pc(offset);
         
         // remove old pc
-        let pc = self.current_queue_mut().unwrap().pop_front().unwrap();
+        let pc = self.pc();
         self.current_queue_mut().unwrap().push_back(pc);
         SimulationEvent::Jumped
     }

@@ -20,7 +20,7 @@ impl Instruction
 {
     /// Create a new instruction
     #[inline]
-    fn new(
+    pub fn new(
         op: OpCode,
         modifier: Modifier,
         a: Value,

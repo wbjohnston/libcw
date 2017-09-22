@@ -1,4 +1,4 @@
-//! An example of running a core with the common warrior, the imp, loaded.
+//! An example of running a core with the warriors im and dwarf loaded
 
 use std::thread;
 use std::time;
@@ -60,9 +60,48 @@ fn main()
             )
     ]; 
 
+    let dwarf = vec![
+        Instruction::new(
+            OpCode::Add,
+            Modifier::AB,
+            4,
+            AddressingMode::Immediate,
+            3,
+            AddressingMode::Direct
+            ),
+        Instruction::new(
+            OpCode::Mov,
+            Modifier::I,
+            2,
+            AddressingMode::Direct,
+            2,
+            AddressingMode::BIndirect
+            ),
+        Instruction::new(
+            OpCode::Jmp,
+            Modifier::I,
+            -2,
+            AddressingMode::Direct,
+            0,
+            AddressingMode::Direct
+            ),
+        Instruction::new(
+            OpCode::Dat,
+            Modifier::I,
+            0,
+            AddressingMode::Direct,
+            0,
+            AddressingMode::Direct
+            ),
+
+    ]; 
+
     // create mars
     let mut mars = MarsBuilder::new()
-        .build_and_load(vec![(4000, None, &imp)])
+        .build_and_load(vec![
+            (2000, None, &imp),
+            (6000, None, &dwarf),
+        ])
         .unwrap();
 
     // display initial state
