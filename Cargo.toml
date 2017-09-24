@@ -2,9 +2,8 @@
 name         = "libcw"
 description  = "Core Wars runtime and parser"
 license      = "MIT"
-license-file = "LICENSE"
 readme       = "README.md"
-version      = "0.1.0"
+version      = "0.1.1"
 authors      = ["Will Johnston"]
 repository   = "https://github.com/wbjohnston/libcw.git"
 homepage     = "https://github.com/wbjohnston/libcw.git"
@@ -15,5 +14,5 @@ parser       = ["regex", "lazy_static"]
 mars         = []
 
 [dependencies]
-regex        = { version = "0.2", optional = true}
-lazy_static  = { version = "0.2", optional = true}
+regex        = { version = "0.2", optional = true }
+lazy_static  = { version = "0.2", optional = true }

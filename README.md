@@ -1,5 +1,5 @@
-# Core Wars Library
-Supporting functions and runtime for the game corewars
+# *libcw*: Core Wars Library
+RedCode Simulator and Parser for the game programming game Core Wars.
 
 Please read the [API documentation on docs.rs](https://docs.rs/libcw)
 
@@ -7,9 +7,19 @@ Please read the [API documentation on docs.rs](https://docs.rs/libcw)
 [![Crates.io](https://img.shields.io/crates/v/libcw.svg)](https://crates.io/crates/libcw)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Contributing
-TODO
+## Features
+Libcw provies the following modules
+#### Simulation
+Redcode simulation. Provides the `Mars` struct
 
+#### Parser
+Parse strings into redcode
+
+#### RedCode
+Module containing datastructures and traits for representing redcode.
+
+## Contributing
+Please see [CONTRIBUTING.md](/CONTRIBUTING.md)
 
 ## License
 #### MIT
