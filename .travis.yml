@@ -30,7 +30,7 @@ before_script:
 
 after_success:
   # Upload docs to github pages
-  - cargo doc && travis-cargo --only stable doc-upload
+  - cargo doc --no-deps && travis-cargo --only stable doc-upload
 
   - | # Upload coverage report to Codecov
       wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
