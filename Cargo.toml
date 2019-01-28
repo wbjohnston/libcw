@@ -8,11 +8,6 @@ authors      = ["Will Johnston"]
 repository   = "https://github.com/wbjohnston/libcw.git"
 homepage     = "https://github.com/wbjohnston/libcw.git"
 
-[features]
-default      = ["parser", "mars"]
-parser       = ["regex", "lazy_static"]
-mars         = []
-
 [dependencies]
 regex        = { version = "0.2", optional = true }
 lazy_static  = { version = "0.2", optional = true }
