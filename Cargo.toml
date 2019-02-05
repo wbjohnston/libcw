@@ -8,7 +8,14 @@ authors      = ["Will Johnston"]
 repository   = "https://github.com/wbjohnston/libcw.git"
 homepage     = "https://github.com/wbjohnston/libcw.git"
 
+[[bin]]
+name = "runner"
+path = "src/bin/runner.rs"
+
+[lib]
+name = "libcw"
+path = "src/lib.rs"
 
 [dependencies]
-regex        = { version = "0.2", optional = true }
-lazy_static  = { version = "0.2", optional = true }
+failure      = "0.1"
+nom = {version = "4.2", features=["verbose-errors"]}
