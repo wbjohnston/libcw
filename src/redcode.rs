@@ -54,6 +54,82 @@ impl Instruction {
   }
 }
 
+impl Instruction {
+  pub fn new(
+    opcode: OpCode,
+    opmode: OpMode,
+    a_mode: AddressingMode,
+    a_value: Address,
+    b_mode: AddressingMode,
+    b_value: Address,
+  ) -> Self {
+    unimplemented!()
+  }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InstructionBuilder {
+  opcode: OpCode,
+  opmode: OpMode,
+  a_mode: AddressingMode,
+  a_value: Address,
+  b_mode: AddressingMode,
+  b_value: Address,
+}
+
+impl InstructionBuilder {
+  pub fn new(code: OpCode) -> Self {
+    let default = Self::default();
+
+    Self {
+      opcode: code,
+      ..default
+    }
+  }
+
+  pub fn opmode(&mut self, opmode: OpMode) -> &mut Self {
+    self.opmode = opmode;
+    self
+  }
+
+  pub fn a_mode(&mut self, a_mode: AddressingMode) -> &mut Self {
+    self.a_mode = a_mode;
+    self
+  }
+
+  pub fn a_value(&mut self, a_value: Address) -> &mut Self {
+    self.a_value = a_value;
+    self
+  }
+
+  pub fn b_mode(&mut self, b_mode: AddressingMode) -> &mut Self {
+    self.b_mode = b_mode;
+    self
+  }
+
+  pub fn b_value(&mut self, b_value: Address) -> &mut Self {
+    self.b_value = b_value;
+    self
+  }
+
+  pub fn build(&self) -> Instruction {
+    Instruction {
+      op: OpField {
+        code: self.opcode,
+        mode: self.opmode,
+      },
+      a: Field {
+        value: self.a_value,
+        mode: self.a_mode,
+      },
+      b: Field {
+        value: self.b_value,
+        mode: self.b_mode,
+      },
+    }
+  }
+}
+
 /// An instruction field containing the mode and opcode
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct OpField {

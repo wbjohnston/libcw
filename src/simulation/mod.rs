@@ -821,6 +821,12 @@ impl Default for Mars {
 mod test {
   use super::*;
 
+  fn exec_instr_at_addr_0_on_default_mars(instr: Instruction, addr: Address) -> Mars {
+    let mut mars = Mars::default();
+    mars.load_program(&[instr], addr);
+    mars
+  }
+
   /// Imp: copies iteself sequentially
   const IMP: &[Instruction] = &[Instruction {
     op: OpField {
