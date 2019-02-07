@@ -5,7 +5,7 @@ language: rust
 cache:
   - cargo
   - directories:
-      - "${TRAVIS_BUILD_DIR}/target/kcov-master/"
+      - "${HOME}/kcov/"
 # Dependencies of kcov, used by coverage
 addons:
   apt:
@@ -44,6 +44,6 @@ script:
 
 after_success:
   # measure code coverage and upload to coveralls.io
-  - cargo coveralls
+  - cargo coveralls --kcov-build-location ${HOME}/kcov/
   # upload documentation to github.io (gh-pages branch)
-  - cargo doc-upload --clobber-index
+  - cargo doc-upload
