@@ -44,6 +44,6 @@ script:
 
 after_success:
   # measure code coverage and upload to coveralls.io
-  - cargo coveralls --kcov-build-location ${HOME}/kcov/
+  - cargo coveralls --kcov-build-location "${HOME}/kcov/"
   # upload documentation to github.io (gh-pages branch)
   - cargo doc-upload
