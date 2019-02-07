@@ -1,4 +1,5 @@
 extern crate failure;
+extern crate itertools;
 extern crate nom;
 pub mod parse;
 pub mod redcode;

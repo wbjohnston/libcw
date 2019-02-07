@@ -1,48 +1,47 @@
+sudo: required
 language: rust
-rust:
-  - stable
-  - beta
-  - nightly
 
-notifications:
-  email:
-    on_success: never
+# Cache cargo symbols for faster build
+cache: cargo
 
-env:
-  global:
-  - RUSTFLAGS="-C link-dead-code"
-
+# Dependencies of kcov, used by coverage
 addons:
   apt:
     packages:
       - libcurl4-openssl-dev
       - libelf-dev
       - libdw-dev
-      - cmake
-      - gcc
       - binutils-dev
-      - libiberty-dev
+      - cmake # also required for cargo-update
+    sources:
+      - kalakris-cmake
+
+# run builds for all the trains (and more)
+rust:
+  - nightly
+  - beta
+  # check it compiles on the latest stable compiler
+  - stable
+matrix:
+  allow_failures:
+    - rust: nightly
 
 before_script:
-    - |
-        pip install 'travis-cargo<0.2' --user &&
-        export PATH=$HOME/.local/bin:$PATH
+  - export PATH=$HOME/.cargo/bin:$PATH
+  - cargo install cargo-update || echo "cargo-update already installed"
+  - cargo install cargo-travis || echo "cargo-travis already installed"
+  - cargo install-update -a # update outdated cached binaries
+
+# the main build
+script:
+  - |
+    cargo build &&
+    cargo test &&
+    cargo bench &&
+    cargo doc
 
 after_success:
-  # Upload docs to github pages
-  - cargo doc --no-deps && travis-cargo --only stable doc-upload
-
-  - | # Upload coverage report to Codecov
-      wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-      tar xzf master.tar.gz &&
-      cd kcov-master &&
-      mkdir build &&
-      cd build &&
-      cmake .. &&
-      make &&
-      make install DESTDIR=../../kcov-build &&
-      cd ../.. &&
-      rm -rf kcov-master &&
-      for file in target/debug/libcw-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
-      bash <(curl -s https://codecov.io/bash) &&
-      echo "Uploaded code coverage"
+  # measure code coverage and upload to coveralls.io
+  - cargo coveralls
+  # upload documentation to github.io (gh-pages branch)
+  - cargo doc-upload

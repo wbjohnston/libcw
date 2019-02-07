@@ -1,7 +1,10 @@
 //! Your one-stop shop for everything Core Wars
 use {
-  self::{AddressingMode::*, OpCode::*},
-  redcode::*,
+  itertools::assert_equal,
+  redcode::{
+    self, Address, AddressingMode, AddressingMode::*, Field, IncrementMode, Instruction, OpCode,
+    OpCode::*, OpField, OpMode, OpMode::*,
+  },
   std::collections::VecDeque,
 };
 
@@ -63,11 +66,11 @@ impl Mars {
   ///
   /// # Examples
   ///
-  pub fn process_pspaces(&self) -> impl Iterator<Item = (Pid, impl Iterator<Item = &Address>)> {
+  pub fn process_pspaces(&self) -> impl Iterator<Item = (usize, &[Address])> {
     self
       .processes
       .iter()
-      .map(|(pid, pspace, _)| (*pid, pspace.iter()))
+      .map(|(pid, pspace, _)| (*pid, pspace.as_slice()))
   }
 
   /// Returns the current number of processes
@@ -117,7 +120,7 @@ impl Mars {
   /// # Panics
   /// panics if there are no processes in the Mars
   pub fn step(&mut self) {
-    assert!(self.processes.len() > 0);
+    assert!(!self.processes.is_empty());
     let size = self.memory.len() as Address;
     let (id, mut pspace, mut threads) = self // dequeue the next process
       .processes
@@ -821,9 +824,10 @@ impl Default for Mars {
 mod test {
   use super::*;
 
-  fn exec_instr_at_addr_0_on_default_mars(instr: Instruction, addr: Address) -> Mars {
+  fn you_know_what_it_is(program: &[Instruction], addr: Address) -> Mars {
     let mut mars = Mars::default();
-    mars.load_program(&[instr], addr);
+    mars.load_program(program, addr);
+    mars.step();
     mars
   }
 
@@ -870,46 +874,37 @@ mod test {
     assert!(mars.processes().nth(2).is_none());
   }
 
+  #[ignore]
   #[test]
   fn loading_creates_new_queue() {
+    let addr1 = 0;
+    let addr2 = 1000;
+    let addr3 = 2000;
+    let addr4 = 3000;
+
     let program = [Instruction::default(); 1000];
     let mut mars = Mars::default();
+    let pid1 = mars.load_program(&program, addr1);
+    let pid2 = mars.load_program(&program, addr2);
+    let pid3 = mars.load_program(&program, addr3);
+    let pid4 = mars.load_program(&program, addr4);
 
-    let expected_queue = VecDeque::from(vec![1]);
+    let expected_queue = {
+      let mut q = VecDeque::new();
+      q.push_back((pid1, Vec::<Address>::new(), VecDeque::from(vec![addr1])));
+      q.push_back((pid2, Vec::<Address>::new(), VecDeque::from(vec![addr2])));
+      q.push_back((pid3, Vec::<Address>::new(), VecDeque::from(vec![addr3])));
+      q.push_back((pid4, Vec::<Address>::new(), VecDeque::from(vec![addr4])));
 
-    assert!(mars.process_count() == 0);
-    mars.load_program(&program, 1);
-    assert!(mars.process_count() == 1);
-    {
-      let (id, _, first_queue) = mars.processes().nth(0).unwrap();
-      assert_eq!(id, 0);
-      assert_eq!(first_queue.collect::<VecDeque<Address>>(), expected_queue);
-    }
-    mars.load_program(&program, 1);
-    assert!(mars.process_count() == 2);
-    {
-      let (id, _, first_queue) = mars.processes().nth(1).unwrap();
-      assert_eq!(id, 1);
-      assert_eq!(first_queue.collect::<VecDeque<Address>>(), expected_queue);
-    }
-    mars.load_program(&program, 1);
-    assert!(mars.process_count() == 3);
-    {
-      let (id, _, first_queue) = mars.processes().nth(2).unwrap();
-      assert_eq!(id, 2);
-      assert_eq!(first_queue.collect::<VecDeque<Address>>(), expected_queue);
-    }
+      q
+    };
+
+    // TODO: fix this text
   }
 
   #[test]
   fn loads_over_boundary() {
-    let add = Instruction {
-      op: OpField {
-        code: Add,
-        ..OpField::default()
-      },
-      ..Instruction::default()
-    };
+    let add = Instruction::new(Add, I, Direct, 100, Direct, 100);
     let program = [add, add, add];
     let mut mars = Mars::default();
     mars.load_program(&program, 7999);
@@ -922,78 +917,39 @@ mod test {
 
   #[test]
   fn test_dat() {
-    let mut mars = Mars::default();
-    let program = [Instruction::default()];
-    mars.load_program(&program, 0);
-    mars.step();
+    let program = [Instruction::new(Dat, I, Direct, 0, Direct, 0)];
+    let mars = you_know_what_it_is(&program, 0);
     assert!(mars.process_count() == 0);
   }
 
   #[test]
-  fn test_mov() {
-    let mut mars = Mars::default();
-    mars.load_program(&IMP, 0);
-    mars.step();
-    assert_eq!(mars.memory()[1], IMP[0]);
+  fn test_mov_i() {
+    let program = &[Instruction::new(Mov, I, Immediate, 0, Direct, 1)];
+    let mars = you_know_what_it_is(program, 0);
+    assert_eq!(mars.memory()[1], program[0]);
+  }
+
+  #[test]
+  fn test_mov_f() {
+    let program = &[Instruction::new(Mov, I, Immediate, 0, Direct, 1)];
+    let mars = you_know_what_it_is(program, 0);
+    assert_eq!(mars.memory()[1], program[0]);
   }
 
   #[test]
   fn test_add() {
-    let mut mars = Mars::default();
-    let program = [Instruction {
-      op: OpField {
-        code: Add,
-        mode: OpMode::I,
-      },
-      a: Field {
-        value: 2,
-        mode: Immediate,
-      },
-      b: Field {
-        value: 1,
-        mode: Direct,
-      },
-    }];
-    mars.load_program(&program, 0);
-    mars.step();
+    let program = [Instruction::new(Add, F, Immediate, 2, Direct, 1)];
+    let mars = you_know_what_it_is(&program, 0);
     assert_eq!(
       mars.memory()[1],
-      Instruction {
-        op: OpField {
-          code: Dat,
-          mode: OpMode::I,
-        },
-        a: Field {
-          value: 2,
-          mode: Immediate,
-        },
-        b: Field {
-          value: 0,
-          mode: Immediate,
-        },
-      }
+      Instruction::new(Dat, I, Direct, 2, Direct, 1)
     )
   }
 
   #[test]
   fn test_jmp() {
-    let mut mars = Mars::default();
-    let program = [Instruction {
-      op: OpField {
-        code: Jmp,
-        mode: OpMode::B,
-      },
-      a: Field {
-        mode: Direct,
-        value: 8005,
-      },
-      b: Field {
-        mode: Direct,
-        value: 0,
-      },
-    }];
-    mars.load_program(&program, 0);
-    mars.step();
+    let program = [Instruction::new(Jmp, B, Direct, 8005, Direct, 0)];
+    let mars = you_know_what_it_is(&program, 0);
     assert_eq!(mars.pc(), Some(5));
   }
 }

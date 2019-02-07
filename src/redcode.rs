@@ -21,6 +21,7 @@ impl fmt::Display for Instruction {
 }
 
 impl Instruction {
+  // TODO: move this into the parser
   pub fn corrected_opmode(&self) -> OpMode {
     match self.op.code {
       Dat | Nop => OpMode::F,
@@ -63,7 +64,20 @@ impl Instruction {
     b_mode: AddressingMode,
     b_value: Address,
   ) -> Self {
-    unimplemented!()
+    Self {
+      op: OpField {
+        mode: opmode,
+        code: opcode,
+      },
+      a: Field {
+        value: a_value,
+        mode: a_mode,
+      },
+      b: Field {
+        value: b_value,
+        mode: b_mode,
+      },
+    }
   }
 }
 

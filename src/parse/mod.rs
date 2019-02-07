@@ -1,10 +1,13 @@
-use {nom::*, redcode::*, std::str::FromStr};
+use {
+  nom::*,
+  redcode::{AddressingMode::*, OpCode::*, OpMode::*, *},
+  std::str::FromStr,
+};
 
 named!(
   pub parse_program<&str, Vec<Instruction>>,
   do_parse!(
     instructions: separated_list!(line_ending, parse_instruction)
-    >> opt!(line_ending) // trailing whitespace
     >> (instructions)
   )
 );
@@ -25,49 +28,49 @@ named!(
 named!(
   parse_opcode<&str, OpCode>,
   alt_complete!(
-    map!(tag_no_case!("DAT"), |_| OpCode::Dat)
-      | map!(tag_no_case!("MOV"), |_| OpCode::Mov)
-      | map!(tag_no_case!("ADD"), |_| OpCode::Add)
-      | map!(tag_no_case!("SUB"), |_| OpCode::Sub)
-      | map!(tag_no_case!("MUL"), |_| OpCode::Mul)
-      | map!(tag_no_case!("DIV"), |_| OpCode::Div)
-      | map!(tag_no_case!("MOD"), |_| OpCode::Mod)
-      | map!(tag_no_case!("JMP"), |_| OpCode::Jmp)
-      | map!(tag_no_case!("JMZ"), |_| OpCode::Jmz)
-      | map!(tag_no_case!("JMN"), |_| OpCode::Jmn)
-      | map!(tag_no_case!("DJN"), |_| OpCode::Djn)
-      | map!(tag_no_case!("SPL"), |_| OpCode::Spl)
-      | map!(tag_no_case!("CMP"), |_| OpCode::Cmp)
-      | map!(tag_no_case!("SEQ"), |_| OpCode::Seq)
-      | map!(tag_no_case!("SNE"), |_| OpCode::Sne)
-      | map!(tag_no_case!("SLT"), |_| OpCode::Slt)
-      | map!(tag_no_case!("LDP"), |_| OpCode::Ldp)
-      | map!(tag_no_case!("STP"), |_| OpCode::Stp)
-      | map!(tag_no_case!("NOP"), |_| OpCode::Nop)
+    map!(tag_no_case!("DAT"), |_| Dat)
+      | map!(tag_no_case!("MOV"), |_| Mov)
+      | map!(tag_no_case!("ADD"), |_| Add)
+      | map!(tag_no_case!("SUB"), |_| Sub)
+      | map!(tag_no_case!("MUL"), |_| Mul)
+      | map!(tag_no_case!("DIV"), |_| Div)
+      | map!(tag_no_case!("MOD"), |_| Mod)
+      | map!(tag_no_case!("JMP"), |_| Jmp)
+      | map!(tag_no_case!("JMZ"), |_| Jmz)
+      | map!(tag_no_case!("JMN"), |_| Jmn)
+      | map!(tag_no_case!("DJN"), |_| Djn)
+      | map!(tag_no_case!("SPL"), |_| Spl)
+      | map!(tag_no_case!("CMP"), |_| Cmp)
+      | map!(tag_no_case!("SEQ"), |_| Seq)
+      | map!(tag_no_case!("SNE"), |_| Sne)
+      | map!(tag_no_case!("SLT"), |_| Slt)
+      | map!(tag_no_case!("LDP"), |_| Ldp)
+      | map!(tag_no_case!("STP"), |_| Stp)
+      | map!(tag_no_case!("NOP"), |_| Nop)
   )
 );
 
 named!(
   parse_addressing_mode<&str, AddressingMode>,
   alt_complete!(
-    map!(char!('#'), |_| AddressingMode::Immediate)
-      | map!(char!('$'), |_| AddressingMode::Direct)
-      | map!(char!('*'), |_| AddressingMode::AIndirect(
+    map!(char!('#'), |_| Immediate)
+      | map!(char!('$'), |_| Direct)
+      | map!(char!('*'), |_| AIndirect(
         IncrementMode::None
       ))
-      | map!(char!('@'), |_| AddressingMode::BIndirect(
+      | map!(char!('@'), |_| BIndirect(
         IncrementMode::None
       ))
-      | map!(char!('{'), |_| AddressingMode::AIndirect(
+      | map!(char!('{'), |_| AIndirect(
         IncrementMode::PreDecrement
       ))
-      | map!(char!('<'), |_| AddressingMode::AIndirect(
+      | map!(char!('}'), |_| AIndirect(
         IncrementMode::PostIncrement
       ))
-      | map!(char!('}'), |_| AddressingMode::BIndirect(
+      | map!(char!('<'), |_| BIndirect(
         IncrementMode::PreDecrement
       ))
-      | map!(char!('>'), |_| AddressingMode::BIndirect(
+      | map!(char!('>'), |_| BIndirect(
         IncrementMode::PostIncrement
       ))
   )
@@ -76,13 +79,13 @@ named!(
 named!(
   parse_opmode<&str, OpMode>,
   alt_complete!(
-    map!(tag_no_case!("AB"), |_| OpMode::AB)
-      | map!(tag_no_case!("BA"), |_| OpMode::BA)
-      | map!(tag_no_case!("A"), |_| OpMode::A)
-      | map!(tag_no_case!("B"), |_| OpMode::B)
-      | map!(tag_no_case!("F"), |_| OpMode::F)
-      | map!(tag_no_case!("I"), |_| OpMode::I)
-      | map!(tag_no_case!("X"), |_| OpMode::X)
+    map!(tag_no_case!("AB"), |_| AB)
+      | map!(tag_no_case!("BA"), |_| BA)
+      | map!(tag_no_case!("A"), |_| A)
+      | map!(tag_no_case!("B"), |_| B)
+      | map!(tag_no_case!("F"), |_| F)
+      | map!(tag_no_case!("I"), |_| I)
+      | map!(tag_no_case!("X"), |_| X)
   )
 );
 
@@ -145,7 +148,7 @@ mod test {
       (
         "#1 ",
         Field {
-          mode: AddressingMode::Immediate,
+          mode: Immediate,
           value: 1,
         },
       ),
@@ -170,7 +173,7 @@ mod test {
       (
         ", $222 ",
         Some(Field {
-          mode: AddressingMode::Direct,
+          mode: Direct,
           value: 222,
         }),
       ),
@@ -186,14 +189,14 @@ mod test {
       (
         "AdD.Ab ",
         OpField {
-          code: OpCode::Add,
-          mode: OpMode::AB,
+          code: Add,
+          mode: AB,
         },
       ),
       (
         "Mov ",
         OpField {
-          code: OpCode::Mov,
+          code: Mov,
           mode: OpMode::default(),
         },
       ),
@@ -206,25 +209,25 @@ mod test {
   #[test]
   fn test_parse_opcode() {
     let values = [
-      ("dAt", OpCode::Dat),
-      ("mOv", OpCode::Mov),
-      ("aDd", OpCode::Add),
-      ("sUb", OpCode::Sub),
-      ("mUl", OpCode::Mul),
-      ("dIv", OpCode::Div),
-      ("mOd", OpCode::Mod),
-      ("jMp", OpCode::Jmp),
-      ("jMz", OpCode::Jmz),
-      ("jMn", OpCode::Jmn),
-      ("dJn", OpCode::Djn),
-      ("sPl", OpCode::Spl),
-      ("cMp", OpCode::Cmp),
-      ("sEq", OpCode::Seq),
-      ("sNe", OpCode::Sne),
-      ("sLt", OpCode::Slt),
-      ("lDp", OpCode::Ldp),
-      ("sTp", OpCode::Stp),
-      ("nOp", OpCode::Nop),
+      ("dAt", Dat),
+      ("mOv", Mov),
+      ("aDd", Add),
+      ("sUb", Sub),
+      ("mUl", Mul),
+      ("dIv", Div),
+      ("mOd", Mod),
+      ("jMp", Jmp),
+      ("jMz", Jmz),
+      ("jMn", Jmn),
+      ("dJn", Djn),
+      ("sPl", Spl),
+      ("cMp", Cmp),
+      ("sEq", Seq),
+      ("sNe", Sne),
+      ("sLt", Slt),
+      ("lDp", Ldp),
+      ("sTp", Stp),
+      ("nOp", Nop),
     ];
     for (s, code) in values.iter() {
       assert_eq!(parse_opcode(s).unwrap().1, *code);
@@ -234,13 +237,13 @@ mod test {
   #[test]
   fn test_parse_opmode() {
     let values = [
-      ("a ", OpMode::A),
-      ("b ", OpMode::B),
-      ("Ab ", OpMode::AB),
-      ("bA ", OpMode::BA),
-      ("x ", OpMode::X),
-      ("i ", OpMode::I),
-      ("f ", OpMode::F),
+      ("a ", A),
+      ("b ", B),
+      ("Ab ", AB),
+      ("bA ", BA),
+      ("x ", X),
+      ("i ", I),
+      ("f ", F),
     ];
     for (s, mode) in values.iter() {
       assert_eq!(parse_opmode(s).unwrap().1, *mode);
@@ -253,12 +256,12 @@ mod test {
       "AdD.AB #1, $1 ",
       Instruction {
         op: OpField {
-          code: OpCode::Add,
-          mode: OpMode::AB,
+          code: Add,
+          mode: AB,
         },
         a: Field {
           value: 1,
-          mode: AddressingMode::Immediate,
+          mode: Immediate,
         },
         b: Field {
           value: 1,
@@ -284,59 +287,24 @@ DAT    #0, #0
     assert_eq!(
       parsed,
       vec![
-        Instruction {
-          op: OpField {
-            code: OpCode::Add,
-            mode: OpMode::AB,
-          },
-          a: Field {
-            value: 4,
-            mode: AddressingMode::Immediate
-          },
-          b: Field {
-            value: 3,
-            mode: AddressingMode::default(),
-          },
-        },
-        Instruction {
-          op: OpField {
-            code: OpCode::Mov,
-            mode: OpMode::I,
-          },
-          a: Field {
-            value: 2,
-            mode: AddressingMode::default()
-          },
-          b: Field {
-            value: 2,
-            mode: AddressingMode::AIndirect(IncrementMode::None),
-          },
-        },
-        Instruction {
-          op: OpField {
-            code: OpCode::Jmp,
-            mode: OpMode::default(),
-          },
-          a: Field {
-            value: 2,
-            mode: AddressingMode::default()
-          },
-          b: Field::default()
-        },
-        Instruction {
-          op: OpField {
-            code: OpCode::Dat,
-            mode: OpMode::default(),
-          },
-          a: Field {
-            value: 0,
-            mode: AddressingMode::Immediate
-          },
-          b: Field {
-            value: 0,
-            mode: AddressingMode::Immediate,
-          },
-        },
+        Instruction::new(Add, AB, Immediate, 4, AddressingMode::default(), 3),
+        Instruction::new(
+          Mov,
+          I,
+          AddressingMode::default(),
+          2,
+          BIndirect(IncrementMode::None),
+          2
+        ),
+        Instruction::new(
+          Jmp,
+          OpMode::default(),
+          AddressingMode::default(),
+          2,
+          AddressingMode::default(),
+          Address::default()
+        ),
+        Instruction::new(Dat, OpMode::default(), Immediate, 0, Immediate, 0),
       ]
     )
   }
