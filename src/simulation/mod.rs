@@ -11,12 +11,18 @@ use {
 /// A process id
 pub type Pid = usize;
 
+pub type Threads = VecDeque<Address>;
+
+pub type PSpace = Vec<Address>;
+
+pub type Process = (Pid, PSpace, Threads);
+
 /// A corewars simulator
 #[derive(Debug, Clone)]
 pub struct Mars {
   memory: Vec<Instruction>,
   p_space_size: usize,
-  processes: VecDeque<(Pid, Vec<Address>, VecDeque<Address>)>,
+  processes: VecDeque<Process>,
 }
 
 impl Mars {
@@ -39,19 +45,8 @@ impl Mars {
   }
 
   /// Returns each processes resources zipped with its pid
-  pub fn processes(
-    &self,
-  ) -> impl Iterator<
-    Item = (
-      Pid,
-      impl Iterator<Item = Address> + '_,
-      impl Iterator<Item = Address> + '_,
-    ),
-  > {
-    self
-      .processes
-      .iter()
-      .map(|&(pid, ref pspace, ref queue)| (pid, pspace.iter().cloned(), queue.iter().cloned()))
+  pub fn processes(&self) -> impl Iterator<Item = &Process> {
+    self.processes.iter()
   }
 
   /// Return process queues zipped with the owning process' id
