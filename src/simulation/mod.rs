@@ -849,23 +849,23 @@ mod test {
     mars.load_program(&[Instruction::default()], 5); // will kill thread
     mars.load_program(IMP, 10);
 
-    assert!(mars.processes().nth(0).unwrap().2.nth(0).unwrap() == 1);
-    assert!(mars.processes().nth(1).unwrap().2.nth(0).unwrap() == 5);
-    assert!(mars.processes().nth(2).unwrap().2.nth(0).unwrap() == 10);
+    assert!(mars.processes().nth(0).unwrap().2.iter().nth(0).unwrap() == &1);
+    assert!(mars.processes().nth(1).unwrap().2.iter().nth(0).unwrap() == &5);
+    assert!(mars.processes().nth(2).unwrap().2.iter().nth(0).unwrap() == &10);
 
     mars.step();
 
     // first inline should move to the back after being incremented
-    assert!(mars.processes().nth(0).unwrap().2.nth(0).unwrap() == 5);
-    assert!(mars.processes().nth(1).unwrap().2.nth(0).unwrap() == 10);
-    assert!(mars.processes().nth(2).unwrap().2.nth(0).unwrap() == 2);
+    assert!(mars.processes().nth(0).unwrap().2.iter().nth(0).unwrap() == &5);
+    assert!(mars.processes().nth(1).unwrap().2.iter().nth(0).unwrap() == &10);
+    assert!(mars.processes().nth(2).unwrap().2.iter().nth(0).unwrap() == &2);
 
     mars.step();
 
     // first inline should move. The process that executed a dat should have
     // been killed
-    assert!(mars.processes().nth(0).unwrap().2.nth(0).unwrap() == 10);
-    assert!(mars.processes().nth(1).unwrap().2.nth(0).unwrap() == 2);
+    assert!(mars.processes().nth(0).unwrap().2.iter().nth(0).unwrap() == &10);
+    assert!(mars.processes().nth(1).unwrap().2.iter().nth(0).unwrap() == &2);
     assert!(mars.processes().nth(2).is_none());
   }
 
