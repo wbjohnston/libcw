@@ -3,3 +3,6 @@ target/
 **/*.rs.bk
 tags.*
 tags
+
+.idea/
+.vscode/
