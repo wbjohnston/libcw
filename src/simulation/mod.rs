@@ -8,6 +8,8 @@ use {
   std::collections::VecDeque,
 };
 
+const MARS_DEFAULT_SIZE: usize = 8000;
+
 /// A process id
 pub type Pid = usize;
 
@@ -32,6 +34,11 @@ impl Mars {
       .processes
       .front()
       .and_then(|(_, _, process)| process.front().cloned())
+  }
+
+  /// Return size of mars' memory
+  pub fn size(&self) -> usize {
+    self.memory.len()
   }
 
   /// Return the next process id that will execute
@@ -843,6 +850,138 @@ mod test {
   }];
 
   #[test]
+  fn mov_a() {
+    let mut mars = Mars::default();
+    let target_addr = mars.size() + 50;
+    let expected_addr = target_addr % mars.size();
+    let program = &[
+      Instruction::new(Mov, A, Direct, 1, Direct, target_addr as Address),
+      Instruction::new(Nop, F, Immediate, 100, Immediate, 100),
+    ];
+    mars.load_program(program, 0);
+    mars.step();
+
+    let expected = Instruction {
+      a: program[1].a,
+      ..Instruction::default()
+    };
+    assert_eq!(expected, mars.memory()[expected_addr])
+  }
+
+  #[test]
+  fn mov_b() {
+    let mut mars = Mars::default();
+    let target_addr = mars.size() + 50;
+    let expected_addr = target_addr % mars.size();
+    let program = &[
+      Instruction::new(Mov, B, Direct, 1, Direct, target_addr as Address),
+      Instruction::new(Nop, F, Immediate, 100, Immediate, 100),
+    ];
+    mars.load_program(program, 0);
+    mars.step();
+
+    let expected = Instruction {
+      b: program[1].b,
+      ..Instruction::default()
+    };
+    assert_eq!(expected, mars.memory()[expected_addr])
+  }
+
+  #[test]
+  fn mov_ab() {
+    let mut mars = Mars::default();
+    let target_addr = mars.size() + 50;
+    let expected_addr = target_addr % mars.size();
+    let program = &[
+      Instruction::new(Mov, AB, Direct, 1, Direct, target_addr as Address),
+      Instruction::new(Nop, F, Immediate, 100, Immediate, 100),
+    ];
+    mars.load_program(program, 0);
+    mars.step();
+
+    let expected = Instruction {
+      b: program[1].a,
+      ..Instruction::default()
+    };
+    assert_eq!(expected, mars.memory()[expected_addr])
+  }
+
+  #[test]
+  fn mov_ba() {
+    let mut mars = Mars::default();
+    let target_addr = mars.size() + 50;
+    let expected_addr = target_addr % mars.size();
+    let program = &[
+      Instruction::new(Mov, BA, Direct, 1, Direct, target_addr as Address),
+      Instruction::new(Nop, F, Immediate, 100, Immediate, 100),
+    ];
+    mars.load_program(program, 0);
+    mars.step();
+
+    let expected = Instruction {
+      a: program[1].b,
+      ..Instruction::default()
+    };
+    assert_eq!(expected, mars.memory()[expected_addr])
+  }
+
+  #[test]
+  fn mov_f() {
+    let mut mars = Mars::default();
+    let target_addr = mars.size() + 50;
+    let expected_addr = target_addr % mars.size();
+    let program = &[
+      Instruction::new(Mov, F, Direct, 1, Direct, target_addr as Address),
+      Instruction::new(Nop, F, Immediate, 100, Immediate, 100),
+    ];
+    mars.load_program(program, 0);
+    mars.step();
+
+    let expected = Instruction {
+      a: program[1].a,
+      b: program[1].b,
+      ..Instruction::default()
+    };
+    assert_eq!(expected, mars.memory()[expected_addr])
+  }
+
+  #[test]
+  fn mov_i() {
+    let mut mars = Mars::default();
+    let target_addr = mars.size() + 50;
+    let expected_addr = target_addr % mars.size();
+    let program = &[
+      Instruction::new(Mov, I, Direct, 1, Direct, target_addr as Address),
+      Instruction::new(Nop, F, Immediate, 100, Immediate, 100),
+    ];
+    mars.load_program(program, 0);
+    mars.step();
+
+    let expected = program[1];
+    assert_eq!(expected, mars.memory()[expected_addr])
+  }
+
+  #[test]
+  fn mov_x() {
+    let mut mars = Mars::default();
+    let target_addr = mars.size() + 50;
+    let expected_addr = target_addr % mars.size();
+    let program = &[
+      Instruction::new(Mov, X, Direct, 1, Direct, target_addr as Address),
+      Instruction::new(Nop, F, Immediate, 100, Immediate, 100),
+    ];
+    mars.load_program(program, 0);
+    mars.step();
+
+    let expected = Instruction {
+      a: program[1].b,
+      b: program[1].a,
+      ..Instruction::default()
+    };
+    assert_eq!(expected, mars.memory()[expected_addr])
+  }
+
+  #[test]
   fn processes_switching() {
     let mut mars = Mars::default();
     mars.load_program(IMP, 1);
@@ -893,8 +1032,7 @@ mod test {
 
       q
     };
-
-    // TODO: fix this text
+    // TODO: implement me
   }
 
   #[test]
