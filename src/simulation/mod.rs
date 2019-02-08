@@ -6,17 +6,22 @@ use {
     OpCode::*, OpField, OpMode, OpMode::*,
   },
   std::collections::VecDeque,
+  std::rc::Rc,
 };
 
 const MARS_DEFAULT_SIZE: usize = 8000;
+const MARS_DEFAULT_P_SPACE_SIZE: usize = 8;
 
 /// A process id
 pub type Pid = usize;
 
+/// A collection on queued threads
 pub type Threads = VecDeque<Address>;
 
-pub type PSpace = Vec<Address>;
+/// Process storage
+pub type PSpace = Rc<Vec<Address>>;
 
+/// A mars process
 pub type Process = (Pid, PSpace, Threads);
 
 /// A corewars simulator
@@ -24,6 +29,7 @@ pub type Process = (Pid, PSpace, Threads);
 pub struct Mars {
   memory: Vec<Instruction>,
   p_space_size: usize,
+  cycle: usize,
   processes: VecDeque<Process>,
 }
 
@@ -39,6 +45,11 @@ impl Mars {
   /// Return size of mars' memory
   pub fn size(&self) -> usize {
     self.memory.len()
+  }
+
+  /// Return the currect cpu cycle
+  pub fn cycle(&self) -> usize {
+    self.cycle
   }
 
   /// Return the next process id that will execute
@@ -65,9 +76,6 @@ impl Mars {
   }
 
   /// Return process private storage(pspace) zipped with the owning process' id
-  ///
-  /// # Examples
-  ///
   pub fn process_pspaces(&self) -> impl Iterator<Item = (usize, &[Address])> {
     self
       .processes
@@ -93,38 +101,66 @@ impl Mars {
     self.memory.as_slice()
   }
 
+  pub fn set_memory(&mut self, instructions: &[Instruction], address: Address) {
+    let size = self.size();
+    for i in 0..instructions.len() {
+      self.memory[((address as usize + i) % size)] = instructions[i];
+    }
+  }
+
   pub fn load_program(&mut self, program: &[Instruction], address: Address) -> Pid {
-    let size = self.memory.len() as Address;
-    let address = address % size; // normalize address
+    let pspace = Rc::new(vec![]);
+    self.load_program_with_pspace(program, address, pspace)
+  }
 
-    // normalize values
-    let program = program
-      .iter()
-      .map(|&x| self.normalize(x))
-      .collect::<Vec<_>>(); // FIXME: bad copy
-
-    for i in 0..program.len() {
-      self.memory[((address as usize + i) % size as usize)] = program[i];
+  /// Load multiple programs in different locations with the same pspace
+  ///
+  /// # Returns
+  /// A slice containing all of the created process ids, in order
+  pub fn load_programs_with_shared_pspace(
+    &mut self,
+    programs: &[&[Instruction]],
+    addresses: &[Address],
+  ) -> Vec<Pid> {
+    let pspace = Rc::new(vec![]);
+    let mut pids = vec![];
+    for (program, &addr) in programs.iter().zip(addresses.iter()) {
+      let pid = self.load_program_with_pspace(program, addr, pspace.clone());
+      pids.push(pid);
     }
 
-    let mut threads = VecDeque::new();
-    threads.push_back(address);
+    pids
+  }
 
-    let pspace = vec![Address::default(); self.p_space_size];
+  fn load_program_with_pspace(
+    &mut self,
+    program: &[Instruction],
+    address: Address,
+    pspace: PSpace,
+  ) -> Pid {
     let pid = self.processes.len();
-
+    let mut threads = VecDeque::new();
+    self.set_memory(program, address);
+    threads.push_back(address);
     self.processes.push_back((pid, pspace, threads));
     pid
   }
 
-  /// Step forward one tick
+  /// Step forward one clock cycle
   ///
   /// # Panics
   /// panics if there are no processes in the Mars
-  pub fn step(&mut self) {
-    assert!(!self.processes.is_empty());
+  ///
+  /// # Returns
+  /// `Some(pid)` if a process with id `pid` was killed. Otherwise `None`
+  pub fn step(&mut self) -> Option<Pid> {
+    assert!(
+      !self.processes.is_empty(),
+      "cannot execute with empty process queue"
+    );
+    self.cycle += 1; // increment cycle
     let size = self.memory.len() as Address;
-    let (id, mut pspace, mut threads) = self // dequeue the next process
+    let (pid, mut pspace, mut threads) = self // dequeue the next process
       .processes
       .pop_front()
       .expect("cannot step if no processes exist");
@@ -718,7 +754,10 @@ impl Mars {
 
     // requeue the process if there are still threads
     if !threads.is_empty() {
-      self.processes.push_back((id, pspace, threads));
+      self.processes.push_back((pid, pspace, threads));
+      None
+    } else {
+      Some(pid)
     }
   }
 
@@ -737,6 +776,14 @@ impl Mars {
     self
   }
 
+  /// Return an address calculated relative to the given program counter and a
+  /// given mode
+  ///
+  /// # Params
+  /// * `pc`: program counter
+  /// * `offset`: offset to add to program counter
+  /// * `size`: size of core
+  /// * `addr_mode`: method to resolve address
   fn resolve_address(
     &self,
     pc: Address,
@@ -807,6 +854,7 @@ impl MarsBuilder {
       memory,
       p_space_size: self.p_space_size,
       processes: VecDeque::new(),
+      ..Mars::default()
     }
   }
 }
@@ -814,8 +862,9 @@ impl MarsBuilder {
 impl Default for Mars {
   fn default() -> Self {
     Mars {
-      memory: vec![Instruction::default(); 8000], // Make this a const
-      p_space_size: 8,
+      memory: vec![Instruction::default(); MARS_DEFAULT_SIZE], // Make this a const
+      p_space_size: MARS_DEFAULT_P_SPACE_SIZE,
+      cycle: 0,
       /// TODO: make this a const
       processes: VecDeque::new(),
     }
@@ -980,6 +1029,8 @@ mod test {
     };
     assert_eq!(expected, mars.memory()[expected_addr])
   }
+
+  // TODO: implement tests for other instructions
 
   #[test]
   fn processes_switching() {

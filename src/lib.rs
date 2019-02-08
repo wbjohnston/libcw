@@ -1,6 +1,8 @@
 extern crate failure;
 extern crate itertools;
 extern crate nom;
+extern crate rand;
+pub mod game;
 pub mod parse;
 pub mod redcode;
 pub mod simulation;

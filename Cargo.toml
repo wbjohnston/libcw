@@ -20,3 +20,4 @@ path = "src/lib.rs"
 failure      = "0.1"
 nom = {version = "4.2", features=["verbose-errors"]}
 itertools = "0.8"
+rand = "0.6"
