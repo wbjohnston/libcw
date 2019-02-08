@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["GameError",""]],"struct":[["Game","Corewars game runtime that wraps a `Mars` to provide additional information about the game"]],"type":[["Pin",""]]});

@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["Mars","A corewars simulator"],["MarsBuilder",""]],"type":[["PSpace",""],["Pid","A process id"],["Process",""],["Threads",""]]});
+initSidebarItems({"struct":[["Mars","A corewars simulator"],["MarsBuilder",""]],"type":[["PSpace","Process storage"],["Pid","A process id"],["Process","A mars process"],["Threads","A collection on queued threads"]]});
